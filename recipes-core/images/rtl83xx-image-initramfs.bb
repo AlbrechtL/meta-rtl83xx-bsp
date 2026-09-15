@@ -52,3 +52,12 @@ add_initramfs_console_node() {
     [ -e ${IMAGE_ROOTFS}/dev/console ] || mknod -m 0622 ${IMAGE_ROOTFS}/dev/console c 5 1
 }
 ROOTFS_POSTPROCESS_COMMAND += "add_initramfs_console_node;"
+
+# The initramfs is the root filesystem; there is no root block device. The
+# stock fstab's /dev/root line makes "mount -a" and mountall.sh fail:
+#   /dev/root: Can't lookup blockdev
+#   mount: mounting /dev/root on / failed: No such file or directory
+rtl83xx_drop_root_fstab() {
+    sed -i '\#^/dev/root[[:space:]]#d' ${IMAGE_ROOTFS}${sysconfdir}/fstab
+}
+ROOTFS_POSTPROCESS_COMMAND += "rtl83xx_drop_root_fstab;"

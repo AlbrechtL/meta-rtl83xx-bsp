@@ -39,3 +39,13 @@ rtl83xx_drop_volatile_fstab() {
     sed -i '\#[[:space:]]/var/volatile[[:space:]]#d' ${IMAGE_ROOTFS}${sysconfdir}/fstab
 }
 ROOTFS_POSTPROCESS_COMMAND += "rtl83xx_drop_volatile_fstab;"
+
+# The kernel has already mounted devtmpfs on /dev (CONFIG_DEVTMPFS_MOUNT), and
+# overlay-init moves it into the overlay root, or leaves it in place if there
+# is no overlay. Mounting it again on the same spot fails:
+#   mount: mounting devtmpfs on /dev failed: Resource busy
+# The initramfs keeps the line; /dev is empty there.
+rtl83xx_drop_devtmpfs_inittab() {
+    sed -i '\#^::sysinit:/bin/mount -t devtmpfs devtmpfs /dev$#d' ${IMAGE_ROOTFS}${sysconfdir}/inittab
+}
+ROOTFS_POSTPROCESS_COMMAND += "rtl83xx_drop_devtmpfs_inittab;"
