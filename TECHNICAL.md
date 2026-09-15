@@ -1,61 +1,9 @@
-# meta-rtl83xx-bsp
+# meta-rtl83xx-bsp — technical notes
 
-Yocto BSP layer for Realtek RTL83xx switches. Current target: **Zyxel GS1900-8 A1**
-(RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
+Deep-dive background for [README.md](README.md): how the boot image is
+assembled, the kernel configuration layout, and traps worth remembering.
 
-`MACHINE = "rtl83xx"`, `DISTRO = "poky-tiny"`.
-
-## Build
-
-```sh
-cd build
-bitbake rtl83xx-bootimage
-```
-
-`EXTRA_IMAGEDEPENDS` also pulls it into `bitbake core-image-minimal`.
-
-Artifacts land in `tmp/deploy/images/rtl83xx/`:
-
-| File | Use |
-|---|---|
-| `uImage-initramfs-rtl83xx.bin` | legacy U-Boot image — boot with `bootm` |
-| `rtl-loader-initramfs-rtl83xx.bin` | same payload, no header — start with `go` |
-| `vmlinux.bin-initramfs-rtl83xx.bin` | raw kernel with the initramfs bundled in |
-| `rtl8380_zyxel_gs1900-8-a1.dtb` | device tree |
-
-## TFTP boot
-
-Serial console is 115200 8N1.
-
-```
-rtk network on
-tftpboot 0x84f00000 192.168.1.12:uImage-initramfs-rtl83xx.bin
-bootm 0x84f00000
-```
-
-Pass the address to `bootm` explicitly; bare `bootm` uses `$loadaddr`.
-
-The alternative, if you prefer the headerless blob:
-
-```
-tftpboot 0x84f00000 192.168.1.12:rtl-loader-initramfs-rtl83xx.bin
-go 0x84f00000
-```
-
-The two files are **not** interchangeable — `bootm` on the raw blob gives
-`Bad Header Checksum`, because that variant deliberately has no uImage header.
-
-### Choosing a staging address
-
-RAM is 128 MB, and KSEG0 maps `0x80000000` + physical, so valid addresses stop
-at `0x88000000`. `0x84f00000` is safe. **Do not use `0x8f000000`** — it is past
-the end of RAM.
-
-Nothing collides at `0x84f00000`: `bootm` copies the payload to `0x80100000`,
-the kernel decompresses to `0x80100000`–`0x807a0000`, and rt-loader relocates
-itself to roughly `0x87d90000`.
-
-## How the image is put together
+## How the boot image is put together
 
 This mirrors OpenWrt's `Device/uimage-rt-loader`
 (`target/linux/realtek/image/Makefile`), which for the GS1900 expands to:
@@ -78,6 +26,15 @@ from `conf/machine/rtl83xx.conf` (`RTL_LOADADDR`, `RTL_UIMAGE_MAGIC`).
 Two loader variants are built from one payload. The raw one is compiled with
 `KERNEL_ADDR=0x80100000` so it can be started from anywhere; the uImage one
 without, so it adopts its own run address (which `bootm` sets to `0x80100000`).
+
+### Choosing a TFTP staging address
+
+RAM is 128 MB, and KSEG0 maps `0x80000000` + physical, so valid addresses stop
+at `0x88000000`. `0x84f00000` is safe.
+
+Nothing collides at `0x84f00000`: `bootm` copies the payload to `0x80100000`,
+the kernel decompresses to `0x80100000`–`0x807a0000`, and rt-loader relocates
+itself to roughly `0x87d90000`.
 
 ### Why the DTB is appended before compression
 
@@ -103,19 +60,11 @@ mkimage patch adding `-M`; oe-core ships unpatched u-boot-tools, so
 `recipes-bsp/rtl83xx-bootimage/files/uimage-setmagic.py` rewrites `ih_magic` and
 recomputes `ih_hcrc` on the finished 64-byte header.
 
-## Recipes
+rt-loader is deliberately split from `rtl83xx-bootimage`: piggy-back mode
+needs the compressed kernel at link time, so the loader can only be built
+after the kernel exists.
 
-| Recipe | Role |
-|---|---|
-| `recipes-bsp/rt-loader/rt-loader_git.bb` | stages the loader **sources** to `${datadir}/rt-loader`; does not compile |
-| `recipes-bsp/rtl83xx-bootimage/` | compresses, links the loader around the kernel, wraps in uImage |
-| `recipes-core/images/rtl83xx-image-initramfs.bb` | the bundled rootfs |
-| `recipes-kernel/linux/linux-yocto-tiny_%.bbappend` | patches, defconfig, config fragment |
-
-rt-loader is deliberately split: piggy-back mode needs the compressed kernel at
-link time, so the loader can only be built after the kernel exists.
-
-The initramfs is a separate recipe from `core-image-minimal` on purpose.
+The initramfs image is a separate recipe from `core-image-minimal` on purpose.
 `EXTRA_IMAGEDEPENDS` applies to *every* image, so reusing the main image as the
 initramfs closes a loop: kernel → initramfs image → `rtl83xx-bootimage` →
 kernel. `rtl83xx-image-initramfs.bb` clears `EXTRA_IMAGEDEPENDS` locally.
@@ -196,7 +145,7 @@ EOF
 ~205 today, and all of it is benign: other architectures (ARM/PPC/x86 symbols, since
 OpenWrt's generic config is arch-neutral), subsystems whose parent menu is off
 (SND/USB/SCSI/NFS/Bluetooth), and OpenWrt-patch-added symbols whose patches are not
-enabled. What must stay empty is the hardware list — see the tripwire check below.
+enabled. What must stay empty is the hardware list — see the tripwire check above.
 
 `KCONF_AUDIT_LEVEL = "2"` in the bbappend makes `do_kernel_configcheck` write
 `.kernel-meta/cfg/mismatch.txt` and warn. The default of `1` passes `--classify` to
@@ -286,71 +235,7 @@ and the initramfs cpio *before* cleaning anything.
 that looks nothing like the real one. Use `bitbake -c clean virtual/kernel`
 followed by a normal build.
 
-## Userspace
-
-Networking (a static `br-lan` at 192.168.1.1), clixon, dropbear and SWUpdate live in
-`../meta-rtl83xx-distro` together with the `rtl83xx-tiny` distro, not in this BSP layer.
-See its README for the layers it needs and the fragment switch. It extends
-`rtl83xx-image-initramfs` through a `dynamic-layers/rtl83xx-bsp` bbappend, so this recipe
-stays a bootable minimal image on its own.
-
-## Flash image
-
-Layout of the 16 MiB SPI-NOR (DTS partitions from
-`0006-realtek-dts-gs1900-data-partition-and-flash-root.patch`):
-
-| Offset | Partition | Size | Content |
-|---|---|---|---|
-| `0x000000` | `u-boot` | 256k | read-only, never written |
-| `0x040000` | `u-boot-env` | 64k | |
-| `0x050000` | `u-boot-env2` | 64k | `bootpartition`: must be `0` (boots `0x260000`) |
-| `0x060000` | `data` | 2M | JFFS2, overlay upper layer, kept on upgrade |
-| `0x260000` | `firmware` | 13952k | uImage, padded to 64k, then squashfs |
-
-`firmware` is OpenWrt's merge of the two stock 6976k slots (OpenWrt commit
-`35acdbe909`), so there is no A/B: an upgrade rewrites the running firmware.
-`data` is Zyxel's `jffs` + `jffs2`.
-
-```sh
-bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade
-```
-
-| File in `tmp/deploy/images/rtl83xx/` | Use |
-|---|---|
-| `rtl83xx-swu-factory-rtl83xx.swu` | first install, from the TFTP initramfs |
-| `rtl83xx-swu-upgrade-rtl83xx.swu` | update of a flashed system, keeps `data` |
-| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-fw` | raw `firmware` partition content |
-| `uImage-rtl83xx.bin` | flash kernel (no initramfs) |
-
-The .swu recipes live in `../meta-rtl83xx-distro`.
-
-### Install and upgrade
-
-1. TFTP-boot `uImage-initramfs-rtl83xx.bin` (see above).
-2. Check that U-Boot boots slot 0. `bootpartition` lives in the second
-   environment, which `/etc/fw_env.config` deliberately does not list, so read
-   it explicitly:
-
-   ```sh
-   echo '/dev/mtd2 0x0 0x1000 0x10000' > /tmp/env2.config
-   fw_printenv -c /tmp/env2.config bootpartition   # must print bootpartition=0
-   ```
-
-   Plain `fw_printenv` shows the main environment, the same as U-Boot's
-   `printenv`.
-3. Upload the factory .swu at http://192.168.1.1:8080. It writes `firmware`
-   and wipes `data`. It does not touch either U-Boot environment.
-4. Reboot. U-Boot now boots from flash.
-
-Later updates: upload the upgrade .swu to the running flash system. The board
-reboots by itself. If an upgrade is interrupted, TFTP-boot the initramfs again
-and repeat the factory install.
-
-SWUpdate picks the software set from the root filesystem
-(`/etc/swupdate/conf.d/20-rtl83xx-mode`): the initramfs only accepts
-`rtl83xx.factory`, the flash system only `rtl83xx.upgrade`.
-
-### Boot from flash
+## Boot from flash
 
 - U-Boot loads the uImage at `0x260000`.
 - `mtdsplit_uimage` (`pending-6.18/400` plus patch 0003) splits `firmware`
@@ -364,6 +249,10 @@ SWUpdate picks the software set from the root filesystem
   `/overlay` and an overlay with `lowerdir=/` on `/mnt`. It then
   `pivot_root`s, keeping the squashfs at `/rom`, and execs busybox init.
   If `data` does not mount, the upper layer falls back to tmpfs.
+
+`firmware` is OpenWrt's merge of the two stock 6976k slots (OpenWrt commit
+`35acdbe909`), so there is no A/B: an upgrade rewrites the running firmware.
+`data` is Zyxel's `jffs` + `jffs2`.
 
 ### Traps
 
@@ -426,10 +315,15 @@ it over `u-boot-env`. Without the file the write fails instead. Today no .swu
 writes it at all: there is no `bootenv`, and both sw-descriptions turn off
 `bootloader_transaction_marker` and `bootloader_state_marker`.
 
+## Known issues / ToDo
 
-# ToDo
-* Rework kconfigs
-  - too much enabled
-  - need to use poky standard
-  - Lot of "[INFO]: the following symbols were not found in the active configuration:"
-* Check why patch 0004 and 0005 are necessary. Claude did it.
+- Kernel config rework: too much is enabled; needs to move closer to the
+  poky-tiny standard set. Expect a lot of "[INFO]: the following symbols were
+  not found in the active configuration:" warnings until then.
+- Verify why `0004-realtek-dts-replace-rtl838x.dtsi-with-the-OpenWrt-ver.patch`
+  and `0005-net-phylink-put-link_gpio-if-phylink_create-fails.patch` under
+  `recipes-kernel/linux/files/` are actually necessary — added while chasing a
+  build failure, not yet re-checked from first principles.
+
+Find the next size offender with `readelf -d` over the rootfs (`NEEDED`
+entries) rather than grepping pkgdata.
