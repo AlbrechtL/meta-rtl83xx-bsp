@@ -12,23 +12,36 @@ live in the sibling `meta-rtl83xx-distro` layer.
 See [TECHNICAL.md](TECHNICAL.md) for how the boot image is built, the kernel
 configuration layout, and known traps/pitfalls.
 
-## Build
+## Building the images
 
 ```sh
 cd build
-bitbake rtl83xx-bootimage
+bitbake rtl83xx-bootimage                        # TFTP boot image
+bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade  # SWUpdate packages
 ```
 
-`EXTRA_IMAGEDEPENDS` also pulls it into `bitbake core-image-minimal`.
+The `.swu` recipes live in `meta-rtl83xx-distro`, so that layer is required for
+the second command. They pull in `rtl83xx-image` and `rtl83xx-bootimage`
+automatically, so the second command alone builds everything.
 
-Artifacts land in `tmp/deploy/images/rtl83xx/`:
+Output lands in `build/tmp/deploy/images/rtl83xx/`. The names below are the
+stable symlinks; each points to a timestamped file next to it.
 
-| File | Use |
-|---|---|
-| `uImage-initramfs-rtl83xx.bin` | legacy U-Boot image — boot with `bootm` |
-| `rtl-loader-initramfs-rtl83xx.bin` | same payload, no header — start with `go` |
-| `vmlinux.bin-initramfs-rtl83xx.bin` | raw kernel with the initramfs bundled in |
-| `rtl8380_zyxel_gs1900-8-a1.dtb` | device tree |
+| File | Built by | What it is for |
+|---|---|---|
+| **`uImage-initramfs-rtl83xx.bin`** | `rtl83xx-bootimage` | TFTP boot with `bootm`. Kernel with the initramfs bundled in, runs entirely from RAM. Used for the first install and for recovery. |
+| **`rtl-loader-initramfs-rtl83xx.bin`** | `rtl83xx-bootimage` | Same payload without the uImage header. TFTP boot with `go`. |
+| **`rtl83xx-swu-factory-rtl83xx.swu`** | `rtl83xx-swu-factory` | First install, uploaded from the TFTP initramfs. Writes `firmware` and wipes `data`. |
+| **`rtl83xx-swu-upgrade-rtl83xx.swu`** | `rtl83xx-swu-upgrade` | Update of a flashed system. Rewrites `firmware`, keeps `data`. |
+| `uImage-rtl83xx.bin` | `rtl83xx-bootimage` | Flash kernel, no initramfs. The head of the `firmware` partition. |
+| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-fw` | `rtl83xx-image` | `firmware` partition content: `uImage-rtl83xx.bin`, padded to 64k, then the squashfs. Inside both `.swu`. |
+| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-data` | `rtl83xx-image` | Empty JFFS2 filling the whole `data` partition. Inside the factory `.swu`. |
+| `rtl83xx-image-rtl83xx.rootfs.squashfs-xz` | `rtl83xx-image` | Flash root filesystem. |
+| `rtl83xx-image-initramfs-rtl83xx.cpio.gz` | `rtl83xx-image-initramfs` | Initramfs bundled into the TFTP kernel. |
+| `vmlinux.bin-initramfs-rtl83xx.bin`, `vmlinux.bin-rtl83xx.bin` | `virtual/kernel` | Raw kernels, before compression and rt-loader. |
+| `rtl8380_zyxel_gs1900-8-a1.dtb` | `virtual/kernel` | Device tree, appended to the kernel. |
+
+The files in bold are the ones you use; the rest are intermediate artifacts.
 
 ## TFTP boot
 
@@ -53,18 +66,6 @@ go 0x84f00000
 The two files are **not** interchangeable — `bootm` on the raw blob gives
 `Bad Header Checksum`, because that variant deliberately has no uImage header.
 
-## Recipes
-
-| Recipe | Role |
-|---|---|
-| `recipes-bsp/rt-loader/rt-loader_git.bb` | stages the loader **sources**; does not compile |
-| `recipes-bsp/rtl83xx-bootimage/` | compresses, links the loader around the kernel, wraps in uImage |
-| `recipes-core/images/rtl83xx-image-initramfs.bb` | the TFTP-bootable rootfs |
-| `recipes-core/images/rtl83xx-image.bb` | the flashable rootfs (squashfs + JFFS2 overlay) |
-| `recipes-core/rtl83xx-overlay-init/` | pivots the flash rootfs onto a JFFS2 overlay |
-| `recipes-bsp/rtl83xx-ubootenv-config/` | `/etc/fw_env.config` for the main U-Boot environment |
-| `recipes-kernel/linux/linux-yocto-tiny_%.bbappend` | patches, defconfig, kernel metadata fragments |
-
 ## Flash image
 
 Layout of the 16 MiB SPI-NOR:
@@ -78,17 +79,6 @@ Layout of the 16 MiB SPI-NOR:
 | `0x260000` | `firmware` | 13952k | uImage, padded to 64k, then squashfs |
 
 There is no A/B slot: an upgrade rewrites the running firmware in place.
-
-```sh
-bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade
-```
-
-The `.swu` recipes live in `meta-rtl83xx-distro`.
-
-| File in `tmp/deploy/images/rtl83xx/` | Use |
-|---|---|
-| `rtl83xx-swu-factory-rtl83xx.swu` | first install, from the TFTP initramfs |
-| `rtl83xx-swu-upgrade-rtl83xx.swu` | update of a flashed system, keeps `data` |
 
 ### Install and upgrade
 
@@ -109,3 +99,16 @@ The `.swu` recipes live in `meta-rtl83xx-distro`.
 Later updates: upload the upgrade `.swu` to the running flash system. The
 board reboots by itself. If an upgrade is interrupted, TFTP-boot the
 initramfs again and repeat the factory install.
+
+## Recipes
+
+| Recipe | Role |
+|---|---|
+| `recipes-bsp/rt-loader/rt-loader_git.bb` | stages the loader **sources**; does not compile |
+| `recipes-bsp/rtl83xx-bootimage/` | compresses, links the loader around the kernel, wraps in uImage |
+| `recipes-core/images/rtl83xx-image-initramfs.bb` | the TFTP-bootable rootfs |
+| `recipes-core/images/rtl83xx-image.bb` | the flashable rootfs (squashfs + JFFS2 overlay) |
+| `recipes-core/rtl83xx-overlay-init/` | pivots the flash rootfs onto a JFFS2 overlay |
+| `recipes-bsp/rtl83xx-ubootenv-config/` | `/etc/fw_env.config` for the main U-Boot environment |
+| `classes-recipe/image_types_rtl83xx.bbclass` | the `rtl83xx-fw` and `rtl83xx-data` image types |
+| `recipes-kernel/linux/linux-yocto-tiny_%.bbappend` | patches, defconfig, kernel metadata fragments |
