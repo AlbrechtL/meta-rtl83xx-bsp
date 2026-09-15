@@ -17,13 +17,22 @@
 # 5. uImage none   legacy U-Boot header, compression "none" because what U-Boot
 #                  sees is the loader, not a compressed kernel.
 #
-# Two loader variants are produced from the same payload:
+# Two kernels go through this pipeline:
+#
+#   initramfs  vmlinux.bin-initramfs-*, the TFTP boot/installer image
+#   flash      vmlinux.bin-*, without initramfs; its uImage is the head of the
+#              "firmware" partition (image_types_rtl83xx.bbclass appends the
+#              squashfs behind it)
+#
+# and two loader variants are produced from the initramfs payload:
 #
 #   rtl-loader-*.bin  built with KERNEL_ADDR=${RTL_LOADADDR}, so the loader may
 #                     be started from any address ("go") and still decompresses
 #                     the kernel to its fixed link address.
 #   uImage-*.bin      built without KERNEL_ADDR, so the loader adopts its own
 #                     run address; U-Boot's bootm places it at RTL_LOADADDR.
+#
+# The flash kernel only needs the uImage variant.
 #
 # The recipe post-processes artifacts published by the kernel's do_deploy, the
 # same way oe-core's kernel-fit-image.bbclass does.
@@ -60,6 +69,7 @@ RTL_LOADADDR ?= "0x80100000"
 RTL_UIMAGE_MAGIC ?= "0x83800000"
 RTL_DTB ?= "rtl8380_zyxel_gs1900-8-a1.dtb"
 RTL_KERNEL_BIN ?= "vmlinux.bin-initramfs-${MACHINE}.bin"
+RTL_KERNEL_BIN_FLASH ?= "vmlinux.bin-${MACHINE}.bin"
 # mkimage truncates ih_name at 32 bytes, so drop the kernel type suffix that
 # PKGV carries ("6.18.39-yocto-tiny" -> "6.18.39").
 RTL_UIMAGE_NAME ?= "MIPS ${DISTRO} Linux-${@d.getVar('PKGV').split('-')[0]}"
@@ -71,40 +81,50 @@ RTL_UIMAGE_NAME ?= "MIPS ${DISTRO} Linux-${@d.getVar('PKGV').split('-')[0]}"
 # at the recipe sysroot plus the tune arguments.
 RT_LOADER_CC = "${TARGET_PREFIX}gcc --sysroot=${STAGING_DIR_TARGET} ${TUNE_CCARGS}"
 
-# Build one rt-loader variant. $1 = output name, remaining args go to make.
+# Build one rt-loader variant. $1 = work directory holding kernel-dtb.lzma and
+# the rt-loader sources, $2 = output name, remaining args go to make.
 rtl_build_loader() {
-    out="$1"
-    shift
-    oe_runmake -C ${B}/rt-loader all \
+    dir="$1"
+    out="$2"
+    shift 2
+    oe_runmake -C $dir/rt-loader all \
         CROSS_COMPILE=${TARGET_PREFIX} \
         "CC=${RT_LOADER_CC}" \
-        KERNEL_IMG_IN=${B}/kernel-dtb.lzma \
-        KERNEL_IMG_OUT=${B}/$out.bin \
-        BUILD_DIR=${B}/$out.build \
+        KERNEL_IMG_IN=$dir/kernel-dtb.lzma \
+        KERNEL_IMG_OUT=$dir/$out.bin \
+        BUILD_DIR=$dir/$out.build \
         "$@"
 }
 
-do_compile() {
-    kernel="${DEPLOY_DIR_IMAGE}/${RTL_KERNEL_BIN}"
+# Run the whole pipeline for one kernel. $1 = kernel binary in
+# DEPLOY_DIR_IMAGE, $2 = work directory below ${B}. Produces $dir/uImage, and
+# $dir/rtl-loader.bin as well when $3 is "raw".
+rtl_build_bootimage() {
+    kernel="${DEPLOY_DIR_IMAGE}/$1"
+    dir="${B}/$2"
     dtb="${DEPLOY_DIR_IMAGE}/${RTL_DTB}"
 
     for f in "$kernel" "$dtb"; do
         [ -f "$f" ] || bbfatal "missing kernel artifact: $f"
     done
 
+    rm -rf $dir
+    mkdir -p $dir
+
     # 2. append-dtb, onto the uncompressed binary
-    cat "$kernel" "$dtb" > ${B}/kernel-dtb.bin
+    cat "$kernel" "$dtb" > $dir/kernel-dtb.bin
 
     # 3. rt-compress
-    xz -9 --format=lzma --stdout ${B}/kernel-dtb.bin > ${B}/kernel-dtb.lzma
+    xz -9 --format=lzma --stdout $dir/kernel-dtb.bin > $dir/kernel-dtb.lzma
 
     # 4. rt-loader. The Makefile uses relative -Iinclude and -T linker/linker.ld,
     #    so it has to run with its own directory as cwd (make -C does that).
-    rm -rf ${B}/rt-loader
-    cp -R ${RECIPE_SYSROOT}${datadir}/rt-loader ${B}/rt-loader
+    cp -R ${RECIPE_SYSROOT}${datadir}/rt-loader $dir/rt-loader
 
-    rtl_build_loader rtl-loader KERNEL_ADDR=${RTL_LOADADDR}
-    rtl_build_loader rt-loader-uimage
+    if [ "$3" = "raw" ]; then
+        rtl_build_loader $dir rtl-loader KERNEL_ADDR=${RTL_LOADADDR}
+    fi
+    rtl_build_loader $dir rt-loader-uimage
 
     # 5. uImage. oe-core's mkimage has no -M option (that is an OpenWrt patch),
     #    so write a standard header and rewrite the magic afterwards.
@@ -115,23 +135,34 @@ do_compile() {
     uboot-mkimage -A mips -O linux -T kernel -C none \
         -a ${RTL_LOADADDR} -e ${RTL_LOADADDR} \
         -n "${RTL_UIMAGE_NAME}" \
-        -d ${B}/rt-loader-uimage.bin ${B}/uImage
-    python3 ${UNPACKDIR}/uimage-setmagic.py ${B}/uImage ${RTL_UIMAGE_MAGIC}
+        -d $dir/rt-loader-uimage.bin $dir/uImage
+    python3 ${UNPACKDIR}/uimage-setmagic.py $dir/uImage ${RTL_UIMAGE_MAGIC}
+}
+
+do_compile() {
+    rtl_build_bootimage ${RTL_KERNEL_BIN} initramfs raw
+    rtl_build_bootimage ${RTL_KERNEL_BIN_FLASH} flash
 }
 
 do_deploy() {
     install -d ${DEPLOYDIR}
 
-    install -m 0644 ${B}/rtl-loader.bin \
+    install -m 0644 ${B}/initramfs/rtl-loader.bin \
         ${DEPLOYDIR}/rtl-loader-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT}
-    install -m 0644 ${B}/uImage \
+    install -m 0644 ${B}/initramfs/uImage \
         ${DEPLOYDIR}/uImage-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT}
+    install -m 0644 ${B}/flash/uImage \
+        ${DEPLOYDIR}/uImage-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT}
 
     if [ -n "${INITRAMFS_LINK_NAME}" ]; then
         ln -sf rtl-loader-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT} \
             ${DEPLOYDIR}/rtl-loader-${INITRAMFS_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
         ln -sf uImage-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT} \
             ${DEPLOYDIR}/uImage-${INITRAMFS_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
+    fi
+    if [ -n "${KERNEL_IMAGE_LINK_NAME}" ]; then
+        ln -sf uImage-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT} \
+            ${DEPLOYDIR}/uImage-${KERNEL_IMAGE_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
     fi
 }
 addtask deploy after do_compile before do_build

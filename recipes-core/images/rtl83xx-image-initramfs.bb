@@ -10,7 +10,9 @@
 
 SUMMARY = "Initramfs for RTL83xx switches, bundled into the kernel"
 
-IMAGE_INSTALL = "packagegroup-core-boot ${CORE_IMAGE_EXTRA_INSTALL}"
+# rtl83xx-ubootenv-config: fw_printenv/fw_setenv on the U-Boot environment,
+# e.g. to check it before a factory install.
+IMAGE_INSTALL = "packagegroup-core-boot rtl83xx-ubootenv-config ${CORE_IMAGE_EXTRA_INSTALL}"
 
 IMAGE_LINGUAS = " "
 

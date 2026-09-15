@@ -286,13 +286,145 @@ and the initramfs cpio *before* cleaning anything.
 that looks nothing like the real one. Use `bitbake -c clean virtual/kernel`
 followed by a normal build.
 
-## Not done yet
+## Userspace
 
-The flashable image. OpenWrt's `sysupgrade.bin` is
-`append-kernel | pad-to 64k | append-rootfs | pad-rootfs | check-size 13952k |
-append-metadata`, plus the `zyxel-vers` trailer
-(`VERS\nV9.99(AAHH.0) | MM/DD/YYYY\n`) that the stock web UI validates. That
-needs a squashfs rootfs, a `padjffs2` equivalent and the MTD partition map.
+Networking (a static `br-lan` at 192.168.1.1), clixon, dropbear and SWUpdate live in
+`../meta-rtl83xx-distro` together with the `rtl83xx-tiny` distro, not in this BSP layer.
+See its README for the layers it needs and the fragment switch. It extends
+`rtl83xx-image-initramfs` through a `dynamic-layers/rtl83xx-bsp` bbappend, so this recipe
+stays a bootable minimal image on its own.
+
+## Flash image
+
+Layout of the 16 MiB SPI-NOR (DTS partitions from
+`0006-realtek-dts-gs1900-data-partition-and-flash-root.patch`):
+
+| Offset | Partition | Size | Content |
+|---|---|---|---|
+| `0x000000` | `u-boot` | 256k | read-only, never written |
+| `0x040000` | `u-boot-env` | 64k | |
+| `0x050000` | `u-boot-env2` | 64k | `bootpartition`: must be `0` (boots `0x260000`) |
+| `0x060000` | `data` | 2M | JFFS2, overlay upper layer, kept on upgrade |
+| `0x260000` | `firmware` | 13952k | uImage, padded to 64k, then squashfs |
+
+`firmware` is OpenWrt's merge of the two stock 6976k slots (OpenWrt commit
+`35acdbe909`), so there is no A/B: an upgrade rewrites the running firmware.
+`data` is Zyxel's `jffs` + `jffs2`.
+
+```sh
+bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade
+```
+
+| File in `tmp/deploy/images/rtl83xx/` | Use |
+|---|---|
+| `rtl83xx-swu-factory-rtl83xx.swu` | first install, from the TFTP initramfs |
+| `rtl83xx-swu-upgrade-rtl83xx.swu` | update of a flashed system, keeps `data` |
+| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-fw` | raw `firmware` partition content |
+| `uImage-rtl83xx.bin` | flash kernel (no initramfs) |
+
+The .swu recipes live in `../meta-rtl83xx-distro`.
+
+### Install and upgrade
+
+1. TFTP-boot `uImage-initramfs-rtl83xx.bin` (see above).
+2. Check that U-Boot boots slot 0. `bootpartition` lives in the second
+   environment, which `/etc/fw_env.config` deliberately does not list, so read
+   it explicitly:
+
+   ```sh
+   echo '/dev/mtd2 0x0 0x1000 0x10000' > /tmp/env2.config
+   fw_printenv -c /tmp/env2.config bootpartition   # must print bootpartition=0
+   ```
+
+   Plain `fw_printenv` shows the main environment, the same as U-Boot's
+   `printenv`.
+3. Upload the factory .swu at http://192.168.1.1:8080. It writes `firmware`
+   and wipes `data`. It does not touch either U-Boot environment.
+4. Reboot. U-Boot now boots from flash.
+
+Later updates: upload the upgrade .swu to the running flash system. The board
+reboots by itself. If an upgrade is interrupted, TFTP-boot the initramfs again
+and repeat the factory install.
+
+SWUpdate picks the software set from the root filesystem
+(`/etc/swupdate/conf.d/20-rtl83xx-mode`): the initramfs only accepts
+`rtl83xx.factory`, the flash system only `rtl83xx.upgrade`.
+
+### Boot from flash
+
+- U-Boot loads the uImage at `0x260000`.
+- `mtdsplit_uimage` (`pending-6.18/400` plus patch 0003) splits `firmware`
+  into `kernel` and `rootfs`. It searches for the squashfs magic only at erase
+  block boundaries, hence the padding.
+- `hack-6.18/420` makes the mtd named `rootfs` the root device.
+- The DTS bootargs add `rootfstype=squashfs init=/sbin/overlay-init`. The
+  initramfs kernel runs `/init` and ignores `init=`, so both kernels share
+  one DTB.
+- `overlay-init` (`recipes-core/rtl83xx-overlay-init`) mounts `mtd:data` on
+  `/overlay` and an overlay with `lowerdir=/` on `/mnt`. It then
+  `pivot_root`s, keeping the squashfs at `/rom`, and execs busybox init.
+  If `data` does not mount, the upper layer falls back to tmpfs.
+
+### Traps
+
+**OpenWrt's mtdsplit is more than patch 0003.** The sources in 0003 only build
+once `pending-6.18/400` hooks them into Kconfig, the Makefile and `mtdpart.c`.
+They also need `<dt-bindings/mtd/partitions/uimage.h>`, which OpenWrt ships
+in `target/linux/generic/files/` rather than in a patch, hence 0007. The
+symptom was `fatal error: dt-bindings/mtd/partitions/uimage.h: No such file`.
+Also, `MTD_ROOTFS_ROOT_DEV` is only declared by 400; `hack-6.18/420` is what
+sets ROOT_DEV. `mtdsplit_lzma.c` still includes `asm/unaligned.h`, which is
+gone since 6.12, so leave `MTD_SPLIT_LZMA_FW` off or port it.
+
+**The data image must fill the partition.** SWUpdate's flash handler erases
+only the blocks it writes. An empty JFFS2 image shorter than `data` would
+leave old overlay nodes behind, and JFFS2 would mount them again. That is why
+`rtl83xx-data` is padded to `RTL_DATA_SIZE`.
+
+**`/tmp` is a plain directory in this rootfs, and `/var/log` points into
+`/var/volatile`.** On the overlay both would end up on the 2 MiB JFFS2, and
+SWUpdate unpacks the whole .swu into `/tmp`. `overlay-init` mounts tmpfs on
+both. The image drops `/var/volatile` from fstab, because `mount -a` would
+otherwise stack an empty tmpfs over the directories created there.
+
+**An upgrade overwrites what SWUpdate runs from.** The kernel can drop and
+re-read squashfs pages at any time. On the flash system, `20-rtl83xx-mode`
+first copies swupdate, its libraries, the musl loader, `/www` and busybox to
+`/run/swupdate-ram`. It then execs swupdate through the copied loader
+(`ld-musl-*.so.1 --library-path`). SWUpdate runs the `-p` post-update command
+as `execl("/bin/sh", "sh", "-c", cmd)`, i.e. through the squashfs busybox and
+musl loader. The script therefore bind-mounts the RAM copies over both before
+starting swupdate, so the shell and `reboot -f` are RAM-backed too.
+
+The reboot must not happen inside `-p`. SWUpdate's web server calls `-p`
+synchronously and only forwards the final `DONE` status ("Restarting
+system.") after it returns. A `reboot -f` there cuts the browser off without a
+word. `-p` therefore detaches a job with `setsid` and returns. The job waits
+2 s, stops swupdate so that the websocket closes and the page opens its
+restart dialog, then syncs and runs `reboot -f`.
+
+**SWUpdate never reboots by itself.** With `reboot_enabled` the web UI shows
+"Restarting system." and SWUpdate runs `-p`. Without a `-p` nothing happens.
+In the initramfs, `20-rtl83xx-mode` passes `-p /sbin/reboot`.
+
+**SWUpdate needs `CONFIG_HASH_VERIFY` for the sha256 in the sw-descriptions.**
+Without it the parser rejects the description with "hash verification not
+enabled but hash supplied", which is followed by the misleading "Compatible SW
+not found". `HASH_VERIFY` depends on an SSL implementation, so
+`meta-rtl83xx-distro`'s `rtl83xx.cfg` selects openssl. That costs no flash,
+because clixon already ships libcrypto. Do not drop the hashes instead: with a
+single slot, the image has to be verified before `firmware` is erased.
+meta-swupdate derives `DEPENDS` (openssl among them) from that fragment at
+parse time. The swupdate bbappend therefore marks `rtl83xx.cfg` as a parse
+dependency. Without that, an edit to it leaves the stale `DEPENDS` in the parse
+cache: `openssl/bio.h: No such file`, plus "basehash value changed".
+
+**Nothing may install `/etc/u-boot-initial-env`.** `/etc/fw_env.config` points at
+the main environment (`u-boot-env`, mtd1, which holds `bootcmd`). If SWUpdate
+ever writes the environment and cannot read it, it loads that file and stores
+it over `u-boot-env`. Without the file the write fails instead. Today no .swu
+writes it at all: there is no `bootenv`, and both sw-descriptions turn off
+`bootloader_transaction_marker` and `bootloader_state_marker`.
 
 
 # ToDo

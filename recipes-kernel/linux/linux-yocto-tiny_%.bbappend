@@ -32,6 +32,8 @@ SRC_URI += " \
     file://0003-Add-mtd-split-from-OpenWrt-f0d3e332e5f839508f77fba8c.patch \
     file://0004-realtek-dts-replace-rtl838x.dtsi-with-the-OpenWrt-ver.patch \
     file://0005-net-phylink-put-link_gpio-if-phylink_create-fails.patch \
+    file://0006-realtek-dts-gs1900-data-partition-and-flash-root.patch \
+    file://0007-mtd-mtdsplit-add-uimage-dt-bindings-header-from-OpenWrt.patch \
 "
 
 
@@ -232,7 +234,11 @@ SRC_URI += "file://openwrt-generic-patches/pending-6.18/308-mips32r2_tune.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/330-MIPS-kexec-Accept-command-line-parameters-from-users.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/342-powerpc-Enable-kernel-XZ-compression-option-on-PPC_8.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/350-mips-kernel-fix-detect_memory_region-function.patch"
-# SRC_URI += "file://openwrt-generic-patches/pending-6.18/400-mtd-mtdsplit-support.patch"
+SRC_URI += "file://openwrt-generic-patches/pending-6.18/400-mtd-mtdsplit-support.patch"
+# Not part of the copied pending/backport series: 400 only declares
+# MTD_ROOTFS_ROOT_DEV, this hack is what sets ROOT_DEV to the mtd named
+# "rootfs" that mtdsplit_uimage carves out of "firmware".
+SRC_URI += "file://openwrt-generic-patches/hack-6.18/420-mtd-support-OpenWrt-s-MTD_ROOTFS_ROOT_DEV.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/402-mtd-spi-nor-write-support-for-minor-aligned-partitions.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/417-mtd-spi-nand-macronix-disable-continuous-read-for-MX.patch"
 # SRC_URI += "file://openwrt-generic-patches/pending-6.18/420-mtd-redboot_space.patch"
