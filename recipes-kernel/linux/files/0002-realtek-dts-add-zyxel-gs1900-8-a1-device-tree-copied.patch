@@ -1,0 +1,775 @@
+From 0e920701303723f31025323b8d20426b5dd01190 Mon Sep 17 00:00:00 2001
+From: Albrecht Lohofener <albrecht@albrechtloh.de>
+Date: Sat, 12 Sep 2026 14:11:14 +0200
+Subject: [PATCH 2/3] realtek: dts: add zyxel gs1900-8-a1 device tree (copied
+ from OpenWrt)
+
+Signed-off-by: Albrecht Lohofener <albrecht@albrechtloh.de>
+---
+ arch/mips/boot/dts/realtek/Makefile           |   1 +
+ arch/mips/boot/dts/realtek/macros.dtsi        | 107 +++++
+ .../dts/realtek/rtl8380_zyxel_gs1900-8-a1.dts |  13 +
+ .../dts/realtek/rtl8380_zyxel_gs1900.dtsi     | 125 ++++++
+ .../realtek/rtl8380_zyxel_gs1900_gpio.dtsi    |  27 ++
+ .../rtl8380_zyxel_gs1900_gpio_emulated.dtsi   |  27 ++
+ arch/mips/boot/dts/realtek/rtl839x.dtsi       | 405 ++++++++++++++++++
+ 7 files changed, 705 insertions(+)
+ create mode 100644 arch/mips/boot/dts/realtek/macros.dtsi
+ create mode 100644 arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900-8-a1.dts
+ create mode 100644 arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900.dtsi
+ create mode 100644 arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio.dtsi
+ create mode 100644 arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio_emulated.dtsi
+ create mode 100644 arch/mips/boot/dts/realtek/rtl839x.dtsi
+
+diff --git a/arch/mips/boot/dts/realtek/Makefile b/arch/mips/boot/dts/realtek/Makefile
+index d27097987..73fbf5403 100644
+--- a/arch/mips/boot/dts/realtek/Makefile
++++ b/arch/mips/boot/dts/realtek/Makefile
+@@ -1,3 +1,4 @@
+ # SPDX-License-Identifier: GPL-2.0
+ dtb-y	+= cisco_sg220-26.dtb
+ dtb-y	+= cameo-rtl9302c-2x-rtl8224-2xge.dtb
++dtb-y	+= rtl8380_zyxel_gs1900-8-a1.dtb
+diff --git a/arch/mips/boot/dts/realtek/macros.dtsi b/arch/mips/boot/dts/realtek/macros.dtsi
+new file mode 100644
+index 000000000..e0ea0bc5a
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/macros.dtsi
+@@ -0,0 +1,107 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++/dts-v1/;
++
++#define STRINGIZE(s) #s
++#define LAN_LABEL(p, s) STRINGIZE(p ## s)
++#define SWITCH_PORT_LABEL(n) LAN_LABEL(lan, n)
++
++#define PHY_C22(p, n) \
++	phy##p: ethernet-phy@n { \
++		reg = <##n>; \
++		compatible = "ethernet-phy-ieee802.3-c22"; \
++	};
++
++#define PHY_C22_SFP(p, n, s) \
++	phy##p: ethernet-phy@n { \
++		reg = <##n>; \
++		compatible = "ethernet-phy-ieee802.3-c22"; \
++		sfp = <&sfp##s>; \
++	};
++
++#define PHY_C45(p, n) \
++	phy##p: ethernet-phy@n { \
++		reg = <##n>; \
++		compatible = "ethernet-phy-ieee802.3-c45"; \
++	};
++
++#define PHY_C45_PAIR_ORDER(p, n, po) \
++	phy##p: ethernet-phy@n { \
++		reg = <##n>; \
++		compatible = "ethernet-phy-ieee802.3-c45"; \
++		enet-phy-pair-order = <##po>; \
++	};
++
++#define PHY_C45_PSE(p, n, pi) \
++	phy##p: ethernet-phy@n { \
++		reg = <##n>; \
++		compatible = "ethernet-phy-ieee802.3-c45"; \
++		pses = <&pi>; \
++	};
++
++#define HASH_PSE_CELLS #pse-cells
++
++#define PSE_PI(p) \
++	pse_pi##p: pse-pi@p { \
++		reg = <p>; \
++		HASH_PSE_CELLS = <0>; \
++	};
++
++#define SWITCH_PORT(p, l, m) \
++	port##p: port@##p { \
++		reg = <##p>; \
++		label = SWITCH_PORT_LABEL(l) ; \
++		phy-handle = <&phy##p>; \
++		phy-mode = #m ; \
++	};
++
++#define SWITCH_PORT_SDS(p, l, s, i, m) \
++	port##p: port@##p { \
++		reg = <##p>; \
++		label = SWITCH_PORT_LABEL(l) ; \
++		pcs-handle = <&serdes##s i>; \
++		phy-handle = <&phy##p>; \
++		phy-mode = #m ; \
++	};
++
++#define SWITCH_PORT_LED(p, l, s, i, c, m) \
++	port##p: port@##p { \
++		reg = <##p>; \
++		label = SWITCH_PORT_LABEL(l) ; \
++		led-set = <##c>; \
++		pcs-handle = <&serdes##s i>; \
++		phy-handle = <&phy##p>; \
++		phy-mode = #m ; \
++	};
++
++#define SWITCH_PORT_SFP(p, l, s, c, g) \
++	port##p: port@##p { \
++		reg = <##p>; \
++		label = SWITCH_PORT_LABEL(l) ; \
++		led-set = <##c>; \
++		pcs-handle = <&serdes##s 0>; \
++		phy-mode = "1000base-x"; \
++		sfp = <&sfp##g>; \
++		managed = "in-band-status"; \
++	};
++
++/* LED Set mode definitions */
++#define RTL93XX_LED_SET_NONE        (0)
++#define RTL93XX_LED_SET_10G         (1 << 0)
++#define RTL93XX_LED_SET_5G          (1 << 1)
++#define RTL93XX_LED_SET_2P5G        (1 << 3)
++#define RTL93XX_LED_SET_1G          (1 << 5)
++#define RTL93XX_LED_SET_100M        (1 << 7)
++#define RTL93XX_LED_SET_10M         (1 << 8)
++#define RTL93XX_LED_SET_LINK        (1 << 9)
++#define RTL93XX_LED_SET_LINK_BLINK  (1 << 10)
++#define RTL93XX_LED_SET_ACT         (1 << 11)
++#define RTL93XX_LED_SET_RX          (1 << 12)
++#define RTL93XX_LED_SET_TX          (1 << 13)
++#define RTL93XX_LED_SET_COLLISION   (1 << 14)
++#define RTL93XX_LED_SET_DUPLEX      (1 << 15)
++
++/* LED Interface modes */
++#define RTL93XX_LED_MODE_SERIAL             1
++#define RTL93XX_LED_MODE_SINGLE_COLOR_SCAN  2
++#define RTL93XX_LED_MODE_BI_COLOR_SCAN      3
+diff --git a/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900-8-a1.dts b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900-8-a1.dts
+new file mode 100644
+index 000000000..fd3d63e5d
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900-8-a1.dts
+@@ -0,0 +1,13 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "rtl8380_zyxel_gs1900.dtsi"
++#include "rtl8380_zyxel_gs1900_gpio_emulated.dtsi"
++
++/ {
++	compatible = "zyxel,gs1900-8-a1", "realtek,rtl838x-soc";
++	model = "Zyxel GS1900-8 A1 Switch";
++};
++
++&gpio1 {
++	/delete-node/ poe_enable;
++};
+diff --git a/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900.dtsi b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900.dtsi
+new file mode 100644
+index 000000000..68169fd28
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900.dtsi
+@@ -0,0 +1,125 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "rtl838x.dtsi"
++
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/gpio/gpio.h>
++
++/ {
++	aliases {
++		led-boot = &led_sys;
++		led-failsafe = &led_sys;
++		led-running = &led_sys;
++		led-upgrade = &led_sys;
++	};
++
++	memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x8000000>;
++	};
++
++	keys {
++		compatible = "gpio-keys-polled";
++		poll-interval = <20>;
++
++		reset {
++			label = "reset";
++			gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
++			linux,code = <KEY_RESTART>;
++			debounce-interval = <100>;
++		};
++	};
++
++	leds {
++		pinctrl-names = "default";
++		pinctrl-0 = <&pinmux_disable_sys_led>;
++		compatible = "gpio-leds";
++
++		led_sys: sys {
++			label = "green:sys";
++			gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
++		};
++	};
++};
++
++&spi0 {
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <10000000>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "u-boot";
++				reg = <0x0 0x40000>;
++				read-only;
++			};
++			partition@40000 {
++				label = "u-boot-env";
++				reg = <0x40000 0x10000>;
++			};
++			partition@50000 {
++				label = "u-boot-env2";
++				reg = <0x50000 0x10000>;
++			};
++			partition@60000 {
++				label = "jffs";
++				reg = <0x60000 0x100000>;
++			};
++			partition@160000 {
++				label = "jffs2";
++				reg = <0x160000 0x100000>;
++			};
++			partition@b260000 {
++				label = "firmware";
++				reg = <0x260000 0xda0000>;
++				compatible = "openwrt,uimage", "denx,uimage";
++				openwrt,ih-magic = <0x83800000>;
++			};
++		};
++	};
++};
++
++&mdio_bus0 {
++	PHY_C22(8, 8)
++	PHY_C22(9, 9)
++	PHY_C22(10, 10)
++	PHY_C22(11, 11)
++	PHY_C22(12, 12)
++	PHY_C22(13, 13)
++	PHY_C22(14, 14)
++	PHY_C22(15, 15)
++};
++
++&switch0 {
++	ethernet-ports {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		SWITCH_PORT(8, 1, internal)
++		SWITCH_PORT(9, 2, internal)
++		SWITCH_PORT(10, 3, internal)
++		SWITCH_PORT(11, 4, internal)
++		SWITCH_PORT(12, 5, internal)
++		SWITCH_PORT(13, 6, internal)
++		SWITCH_PORT(14, 7, internal)
++		SWITCH_PORT(15, 8, internal)
++
++		port@28 {
++			ethernet = <&ethernet0>;
++			reg = <28>;
++			phy-mode = "internal";
++
++			fixed-link {
++				speed = <1000>;
++				full-duplex;
++			};
++		};
++	};
++};
+diff --git a/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio.dtsi b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio.dtsi
+new file mode 100644
+index 000000000..a4733dfec
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio.dtsi
+@@ -0,0 +1,27 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include <dt-bindings/gpio/gpio.h>
++
++&mdio_aux {
++	status = "okay";
++
++	gpio1: expander@0 {
++		compatible = "realtek,rtl8231";
++		reg = <0x0>;
++
++		gpio-controller;
++		#gpio-cells = <2>;
++		gpio-ranges = <&gpio1 0 0 37>;
++
++		poe_enable {
++			gpio-hog;
++			gpios = <13 GPIO_ACTIVE_HIGH>;
++			output-high;
++		};
++
++		led-controller {
++			compatible = "realtek,rtl8231-leds";
++			status = "disabled";
++		};
++	};
++};
+diff --git a/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio_emulated.dtsi b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio_emulated.dtsi
+new file mode 100644
+index 000000000..f98e404a3
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/rtl8380_zyxel_gs1900_gpio_emulated.dtsi
+@@ -0,0 +1,27 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include <dt-bindings/gpio/gpio.h>
++
++&mdio_gpio {
++	status = "okay";
++
++	gpio1: expander@0 {
++		compatible = "realtek,rtl8231";
++		reg = <0x0>;
++
++		gpio-controller;
++		#gpio-cells = <2>;
++		gpio-ranges = <&gpio1 0 0 37>;
++
++		poe_enable {
++			gpio-hog;
++			gpios = <13 GPIO_ACTIVE_HIGH>;
++			output-high;
++		};
++
++		led-controller {
++			compatible = "realtek,rtl8231-leds";
++			status = "disabled";
++		};
++	};
++};
+diff --git a/arch/mips/boot/dts/realtek/rtl839x.dtsi b/arch/mips/boot/dts/realtek/rtl839x.dtsi
+new file mode 100644
+index 000000000..90f614446
+--- /dev/null
++++ b/arch/mips/boot/dts/realtek/rtl839x.dtsi
+@@ -0,0 +1,405 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "macros.dtsi"
++#include <dt-bindings/clock/rtl83xx-clk.h>
++
++/dts-v1/;
++
++/ {
++	#address-cells = <1>;
++	#size-cells = <1>;
++
++	compatible = "realtek,rtl839x-soc";
++
++	osc: oscillator {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <25000000>;
++	};
++
++	ccu: clock-controller {
++		compatible = "realtek,rtl8390-clock";
++		#clock-cells = <1>;
++		clocks = <&osc>;
++		clock-names = "ref_clk";
++	};
++
++	cpus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		cpu@0 {
++			compatible = "mips,mips34Kc";
++			reg = <0>;
++			clocks = <&ccu CLK_CPU>;
++			operating-points-v2 = <&cpu_opp_table>;
++		};
++
++		cpu@1 {
++			compatible = "mips,mips34Kc";
++			reg = <1>;
++			clocks = <&ccu CLK_CPU>;
++			operating-points-v2 = <&cpu_opp_table>;
++		};
++	};
++
++	cpu_opp_table: opp-table-0 {
++		compatible = "operating-points-v2";
++		opp-shared;
++
++		opp00 {
++			opp-hz = /bits/ 64 <425000000>;
++		};
++		opp01 {
++			opp-hz = /bits/ 64 <450000000>;
++		};
++		opp02 {
++			opp-hz = /bits/ 64 <475000000>;
++		};
++		opp03 {
++			opp-hz = /bits/ 64 <500000000>;
++		};
++		opp04 {
++			opp-hz = /bits/ 64 <525000000>;
++		};
++		opp05 {
++			opp-hz = /bits/ 64 <550000000>;
++		};
++		opp06 {
++			opp-hz = /bits/ 64 <575000000>;
++		};
++		opp07 {
++			opp-hz = /bits/ 64 <600000000>;
++		};
++		opp08 {
++			opp-hz = /bits/ 64 <625000000>;
++		};
++		opp09 {
++			opp-hz = /bits/ 64 <650000000>;
++		};
++		opp10 {
++			opp-hz = /bits/ 64 <675000000>;
++		};
++		opp11 {
++			opp-hz = /bits/ 64 <700000000>;
++		};
++		opp12 {
++			opp-hz = /bits/ 64 <725000000>;
++		};
++		opp13 {
++			opp-hz = /bits/ 64 <750000000>;
++		};
++	};
++
++	aliases {
++		serial0 = &uart0;
++		serial1 = &uart1;
++	};
++
++	chosen {
++		bootargs = "earlycon";
++		stdout-path = "serial0:115200n8";
++	};
++
++	cpuintc: cpuintc {
++		compatible = "mti,cpu-interrupt-controller";
++		#address-cells = <0>;
++		#interrupt-cells = <1>;
++		interrupt-controller;
++	};
++
++	soc: soc {
++		compatible = "simple-bus";
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges = <0x0 0x18000000 0x10000>;
++
++		intc: interrupt-controller@3000 {
++			compatible = "realtek,rtl8390-intc", "realtek,rtl-intc";
++			reg = <0x3000 0x18>, <0x3018 0x18>;
++			interrupt-controller;
++			#interrupt-cells = <2>;
++
++			interrupt-parent = <&cpuintc>;
++			interrupts = <2>, <3>, <4>, <5>, <6>;
++		};
++
++		spi0: spi@1200 {
++			compatible = "realtek,rtl8380-spi";
++			reg = <0x1200 0x100>;
++
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++
++		timer0: timer@3100 {
++			compatible = "realtek,rtl8390-timer", "realtek,otto-timer";
++			reg = <0x3100 0x10>, <0x3110 0x10>, <0x3120 0x10>,
++			      <0x3130 0x10>, <0x3140 0x10>;
++
++			interrupt-parent = <&intc>;
++			interrupts = <29 4>, <28 4>, <17 4>, <16 4>, <15 4>;
++			clocks = <&ccu CLK_LXB>;
++		};
++
++		uart0: uart@2000 {
++			compatible = "ns16550a";
++			reg = <0x2000 0x100>;
++
++			clocks = <&ccu CLK_LXB>;
++
++			interrupt-parent = <&intc>;
++			interrupts = <31 1>;
++
++			reg-io-width = <1>;
++			reg-shift = <2>;
++			fifo-size = <1>;
++			no-loopback-test;
++		};
++
++		uart1: uart@2100 {
++			pinctrl-names = "default";
++			pinctrl-0 = <&enable_uart1>;
++
++			compatible = "ns16550a";
++			reg = <0x2100 0x100>;
++
++			clocks = <&ccu CLK_LXB>;
++
++			interrupt-parent = <&intc>;
++			interrupts = <30 2>;
++
++			reg-io-width = <1>;
++			reg-shift = <2>;
++			fifo-size = <1>;
++			no-loopback-test;
++
++			status = "disabled";
++		};
++
++		gpio0: gpio-controller@3500 {
++			compatible = "realtek,rtl8390-gpio", "realtek,otto-gpio";
++			reg = <0x3500 0x20>;
++
++			gpio-controller;
++			#gpio-cells = <2>;
++			ngpios = <24>;
++
++			interrupt-controller;
++			#interrupt-cells = <2>;
++			interrupt-parent = <&intc>;
++			interrupts = <23 2>;
++		};
++
++		watchdog0: watchdog@3150 {
++			compatible = "realtek,rtl8390-wdt";
++			reg = <0x3150 0xc>;
++
++			realtek,reset-mode = "soc";
++
++			clocks = <&ccu CLK_LXB>;
++			timeout-sec = <30>;
++
++			interrupt-parent = <&intc>;
++			interrupt-names = "phase1", "phase2";
++			interrupts = <19 4>, <18 4>;
++		};
++
++	};
++
++	switch0: ethernet-switch@1b000000 {
++		compatible = "realtek,rtl8392-switch", "realtek,otto-switch", "syscon", "simple-mfd";
++		reg = <0x1b000000 0x10000>;
++		interrupt-parent = <&intc>;
++		interrupts = <20 2>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++
++		ethernet0: ethernet {
++			compatible = "realtek,rtl8392-eth";
++			interrupt-parent = <&intc>;
++			interrupts = <24 3>;
++			#interrupt-cells = <1>;
++			phy-mode = "internal";
++
++			fixed-link {
++				speed = <1000>;
++				full-duplex;
++			};
++		};
++
++		mdio_ctrl: mdio-controller {
++			compatible = "realtek,rtl8392-mdio", "realtek,otto-mdio";
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			mdio_bus0: mdio-bus@0 {
++				reg = <0>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++			};
++			mdio_bus1: mdio-bus@1 {
++				reg = <1>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++			};
++		};
++
++		mdio_aux: mdio-aux {
++			compatible = "realtek,rtl8390-aux-mdio";
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			status = "disabled";
++
++			pinctrl-names = "default";
++			pinctrl-0 = <&mdio_aux_mdx>;
++		};
++
++		mdio_serdes: mdio-serdes {
++			compatible = "realtek,rtl8392-serdes-mdio";
++		};
++
++		pcs {
++			compatible = "realtek,rtl8392-pcs", "realtek,otto-pcs";
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			mdio-parent-bus = <&mdio_serdes>;
++
++			serdes0: serdes@0 {
++				reg = <0>;
++				#pcs-cells = <1>;
++			};
++			serdes1: serdes@1 {
++				reg = <1>;
++				#pcs-cells = <1>;
++			};
++			serdes2: serdes@2 {
++				reg = <2>;
++				#pcs-cells = <1>;
++			};
++			serdes3: serdes@3 {
++				reg = <3>;
++				#pcs-cells = <1>;
++			};
++			serdes4: serdes@4 {
++				reg = <4>;
++				#pcs-cells = <1>;
++			};
++			serdes5: serdes@5 {
++				reg = <5>;
++				#pcs-cells = <1>;
++			};
++			serdes6: serdes@6 {
++				reg = <6>;
++				#pcs-cells = <1>;
++			};
++			serdes7: serdes@7 {
++				reg = <7>;
++				#pcs-cells = <1>;
++			};
++			serdes8: serdes@8 {
++				reg = <8>;
++				#pcs-cells = <1>;
++			};
++			serdes9: serdes@9 {
++				reg = <9>;
++				#pcs-cells = <1>;
++			};
++			serdes10: serdes@10 {
++				reg = <10>;
++				#pcs-cells = <1>;
++			};
++			serdes11: serdes@11 {
++				reg = <11>;
++				#pcs-cells = <1>;
++			};
++			serdes12: serdes@12 {
++				reg = <12>;
++				#pcs-cells = <1>;
++			};
++			serdes13: serdes@13 {
++				reg = <13>;
++				#pcs-cells = <1>;
++			};
++		};
++
++		table {
++			compatible = "realtek,rtl8392-table", "realtek,otto-table";
++		};
++
++		soc_thermal: thermal {
++			compatible = "realtek,rtl8390-thermal";
++			#thermal-sensor-cells = <0>;
++		};
++	};
++
++	pinmux@1b000004 {
++		compatible = "pinctrl-single";
++		reg = <0x1b000004 0x4>;
++
++		pinctrl-single,bit-per-mux;
++		pinctrl-single,register-width = <32>;
++		pinctrl-single,function-mask = <0x1>;
++		#pinctrl-cells = <2>;
++
++		enable_uart1: pinmux_enable_uart1 {
++			pinctrl-single,bits = <0x0 0x1 0x3>;
++		};
++
++		disable_jtag: pinmux_disable_jtag {
++			pinctrl-single,bits = <0x0 0x2 0x3>;
++		};
++	};
++
++	/* LED_GLB_CTRL */
++	pinmux@1b0000e4 {
++		compatible = "pinctrl-single";
++		reg = <0x1b0000e4 0x4>;
++
++		pinctrl-single,bit-per-mux;
++		pinctrl-single,register-width = <32>;
++		pinctrl-single,function-mask = <0x1>;
++		#pinctrl-cells = <2>;
++
++		/* enable GPIO 0 */
++		pinmux_disable_sys_led: disable_sys_led {
++			pinctrl-single,bits = <0x0 0x0 0x4000>;
++		};
++
++		/* enable AUX MDC/MDIO */
++		mdio_aux_mdx: aux-mdx-pins {
++			pinctrl-single,bits = <0x0 0x100000 0x1c0000>;
++		};
++
++		/* disable port LED offloading */
++		port_led_offload: port-led-offload {
++			pinctrl-single,bits = <0x0 0x0 0x20>;
++		};
++	};
++
++	sram0: sram@9f000000 {
++		compatible = "mmio-sram";
++		reg = <0x9f000000 0x18000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges = <0 0x9f000000 0x18000>;
++	};
++
++	thermal_zones: thermal-zones {
++		cpu-thermal {
++			polling-delay-passive = <1000>;
++			polling-delay = <1000>;
++			coefficients = <1000 0>;
++			thermal-sensors = <&soc_thermal>;
++			trips {
++				cpu-crit {
++					temperature = <105000>;
++					hysteresis = <2000>;
++					type = "critical";
++				};
++			};
++		};
++	};
++};
+-- 
+2.53.0
+

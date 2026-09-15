@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: MIT
+define KFEATURE_DESCRIPTION "Realtek RTL83xx switch board configuration"
+define KFEATURE_COMPATIBILITY board
+
+# The classification is not cosmetic: it is what do_kernel_configcheck feeds to
+# symbol_why.py. A "hardware" symbol that fails to reach .config is reported
+# even at KCONF_AUDIT_LEVEL=1 (which passes --classify); a "non-hardware" one is
+# filtered out at that level. See classes-recipe/kernel-yocto.bbclass:612-642.
+kconf hardware     rtl83xx-hardware.cfg
+kconf non-hardware rtl83xx-yocto.cfg
