@@ -11,7 +11,7 @@ Yocto BSP layer for Realtek RTL83xx switches. Current target: **Zyxel GS1900-8 A
 
 The layer is hardware-only: kernel, boot image, and flash layout. It boots to a
 shell on its own. Networking, management (clixon/RESTCONF), SSH and SWUpdate
-live in the sibling `meta-rtl83xx-distro` layer.
+live in the sibling `meta-ethernet-switch-os` layer.
 
 See [TECHNICAL.md](TECHNICAL.md) for how the boot image is built, the kernel
 configuration layout, and known traps/pitfalls.
@@ -24,9 +24,10 @@ bitbake rtl83xx-bootimage                        # TFTP boot image
 bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade  # SWUpdate packages
 ```
 
-The `.swu` recipes live in `meta-rtl83xx-distro`, so that layer is required for
-the second command. They pull in `rtl83xx-image` and `rtl83xx-bootimage`
-automatically, so the second command alone builds everything.
+The `.swu` recipes live in `meta-ethernet-switch-os`, so that layer is
+required for the second command. They pull in `rtl83xx-image` and
+`rtl83xx-bootimage` automatically, so the second command alone builds
+everything.
 
 Output lands in `build/tmp/deploy/images/rtl83xx/`. The names below are the
 stable symlinks; each points to a timestamped file next to it.

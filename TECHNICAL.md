@@ -300,7 +300,7 @@ In the initramfs, `20-rtl83xx-mode` passes `-p /sbin/reboot`.
 Without it the parser rejects the description with "hash verification not
 enabled but hash supplied", which is followed by the misleading "Compatible SW
 not found". `HASH_VERIFY` depends on an SSL implementation, so
-`meta-rtl83xx-distro`'s `rtl83xx.cfg` selects openssl. That costs no flash,
+`meta-ethernet-switch-os`'s `rtl83xx.cfg` selects openssl. That costs no flash,
 because clixon already ships libcrypto. Do not drop the hashes instead: with a
 single slot, the image has to be verified before `firmware` is erased.
 meta-swupdate derives `DEPENDS` (openssl among them) from that fragment at
