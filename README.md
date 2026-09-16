@@ -1,5 +1,9 @@
 # meta-rtl83xx-bsp
 
+> **⚠️ Proof of concept.** This project is a proof of concept, created with
+> the help of AI. It has not undergone thorough review or hardening, and
+> should not be assumed suitable for production use.
+
 Yocto BSP layer for Realtek RTL83xx switches. Current target: **Zyxel GS1900-8 A1**
 (RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
 
