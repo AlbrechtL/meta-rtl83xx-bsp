@@ -26,11 +26,12 @@
 #
 # and two loader variants are produced from the initramfs payload:
 #
-#   rtl-loader-*.bin  built with KERNEL_ADDR=${RTL_LOADADDR}, so the loader may
-#                     be started from any address ("go") and still decompresses
-#                     the kernel to its fixed link address.
-#   uImage-*.bin      built without KERNEL_ADDR, so the loader adopts its own
-#                     run address; U-Boot's bootm places it at RTL_LOADADDR.
+#   *-rt-loader.bin  built with KERNEL_ADDR=${RTL_LOADADDR}, so the loader may
+#                    be started from any address ("go") and still decompresses
+#                    the kernel to its fixed link address.
+#   *.bin            uImage, built without KERNEL_ADDR, so the loader adopts
+#                    its own run address; U-Boot's bootm places it at
+#                    RTL_LOADADDR.
 #
 # The flash kernel only needs the uImage variant.
 #
@@ -67,7 +68,6 @@ do_compile[depends] += "virtual/kernel:do_deploy"
 
 RTL_LOADADDR ?= "0x80100000"
 RTL_UIMAGE_MAGIC ?= "0x83800000"
-RTL_DTB ?= "rtl8380_zyxel_gs1900-8-a1.dtb"
 RTL_KERNEL_BIN ?= "vmlinux.bin-initramfs-${MACHINE}.bin"
 RTL_KERNEL_BIN_FLASH ?= "vmlinux.bin-${MACHINE}.bin"
 # mkimage truncates ih_name at 32 bytes, so drop the kernel type suffix that
@@ -148,21 +148,21 @@ do_deploy() {
     install -d ${DEPLOYDIR}
 
     install -m 0644 ${B}/initramfs/rtl-loader.bin \
-        ${DEPLOYDIR}/rtl-loader-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT}
+        ${DEPLOYDIR}/${RTL_IMAGE_BASENAME}-${INITRAMFS_NAME}-rt-loader${KERNEL_IMAGE_BIN_EXT}
     install -m 0644 ${B}/initramfs/uImage \
-        ${DEPLOYDIR}/uImage-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT}
+        ${DEPLOYDIR}/${RTL_IMAGE_BASENAME}-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT}
     install -m 0644 ${B}/flash/uImage \
-        ${DEPLOYDIR}/uImage-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT}
+        ${DEPLOYDIR}/${RTL_IMAGE_BASENAME}-kernel-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT}
 
     if [ -n "${INITRAMFS_LINK_NAME}" ]; then
-        ln -sf rtl-loader-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT} \
-            ${DEPLOYDIR}/rtl-loader-${INITRAMFS_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
-        ln -sf uImage-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT} \
-            ${DEPLOYDIR}/uImage-${INITRAMFS_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
+        ln -sf ${RTL_IMAGE_BASENAME}-${INITRAMFS_NAME}-rt-loader${KERNEL_IMAGE_BIN_EXT} \
+            ${DEPLOYDIR}/${RTL_IMAGE_BASENAME}-${INITRAMFS_LINK_NAME}-rt-loader${KERNEL_IMAGE_BIN_EXT}
+        ln -sf ${RTL_IMAGE_BASENAME}-${INITRAMFS_NAME}${KERNEL_IMAGE_BIN_EXT} \
+            ${DEPLOYDIR}/${RTL_IMAGE_BASENAME}-${INITRAMFS_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
     fi
-    if [ -n "${KERNEL_IMAGE_LINK_NAME}" ]; then
-        ln -sf uImage-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT} \
-            ${DEPLOYDIR}/uImage-${KERNEL_IMAGE_LINK_NAME}${KERNEL_IMAGE_BIN_EXT}
-    fi
+    # Read back by image_types_rtl83xx as the head of the "firmware" partition,
+    # so this name has to be exactly RTL_FLASH_UIMAGE.
+    ln -sf ${RTL_IMAGE_BASENAME}-kernel-${KERNEL_IMAGE_NAME}${KERNEL_IMAGE_BIN_EXT} \
+        ${DEPLOYDIR}/${RTL_FLASH_UIMAGE}
 }
 addtask deploy after do_compile before do_build

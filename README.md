@@ -4,10 +4,17 @@
 > the help of AI. It has not undergone thorough review or hardening, and
 > should not be assumed suitable for production use.
 
-Yocto BSP layer for Realtek RTL83xx switches. Current target: **Zyxel GS1900-8 A1**
+Yocto BSP layer for Realtek RTL83xx switches. Supported board: **Zyxel GS1900-8 A1**
 (RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
 
-`MACHINE = "rtl83xx"`, `DISTRO = "poky-tiny"`.
+`MACHINE = "zyxel-gs1900-8-a1"`, `DISTRO = "poky-tiny"`.
+
+Settings shared by the whole SoC family live in
+`conf/machine/include/rtl83xx.inc`; a machine `.conf` adds the device tree,
+the uImage magic and the flash geometry. Another RTL83xx board is a new
+`.conf` next to `zyxel-gs1900-8-a1.conf`. `rtl83xx` stays in
+`MACHINEOVERRIDES` (via `SOC_FAMILY`), so family-wide recipes keep using
+`COMPATIBLE_MACHINE = "^rtl83xx$"`.
 
 The layer is hardware-only: kernel, boot image, and flash layout. It boots to a
 shell on its own. Networking, management (clixon/RESTCONF), SSH and SWUpdate
@@ -20,8 +27,9 @@ configuration layout, and known traps/pitfalls.
 
 ```sh
 cd build
-bitbake rtl83xx-bootimage                        # TFTP boot image
-bitbake rtl83xx-swu-factory rtl83xx-swu-upgrade  # SWUpdate packages
+bitbake rtl83xx-bootimage    # TFTP boot image
+bitbake ethernet-switch-os-swu-factory \
+        ethernet-switch-os-swu-upgrade    # SWUpdate packages
 ```
 
 The `.swu` recipes live in `meta-ethernet-switch-os`, so that layer is
@@ -29,21 +37,26 @@ required for the second command. They pull in `rtl83xx-image` and
 `rtl83xx-bootimage` automatically, so the second command alone builds
 everything.
 
-Output lands in `build/tmp/deploy/images/rtl83xx/`. The names below are the
-stable symlinks; each points to a timestamped file next to it.
+Output lands in `build/tmp/deploy/images/zyxel-gs1900-8-a1/`. The names below are
+the stable symlinks; each points to a timestamped file next to it.
+
+The boot images are named after the distro that built them
+(`RTL_IMAGE_BASENAME`, default `${DISTRO}`), so a BSP-only `poky-tiny` build
+produces `poky-tiny-initramfs-...` instead. The names below are what
+`meta-ethernet-switch-os` produces.
 
 | File | Built by | What it is for |
 |---|---|---|
-| **`uImage-initramfs-rtl83xx.bin`** | `rtl83xx-bootimage` | TFTP boot with `bootm`. Kernel with the initramfs bundled in, runs entirely from RAM. Used for the first install and for recovery. |
-| **`rtl-loader-initramfs-rtl83xx.bin`** | `rtl83xx-bootimage` | Same payload without the uImage header. TFTP boot with `go`. |
-| **`rtl83xx-swu-factory-rtl83xx.swu`** | `rtl83xx-swu-factory` | First install, uploaded from the TFTP initramfs. Writes `firmware` and wipes `data`. |
-| **`rtl83xx-swu-upgrade-rtl83xx.swu`** | `rtl83xx-swu-upgrade` | Update of a flashed system. Rewrites `firmware`, keeps `data`. |
-| `uImage-rtl83xx.bin` | `rtl83xx-bootimage` | Flash kernel, no initramfs. The head of the `firmware` partition. |
-| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-fw` | `rtl83xx-image` | `firmware` partition content: `uImage-rtl83xx.bin`, padded to 64k, then the squashfs. Inside both `.swu`. |
-| `rtl83xx-image-rtl83xx.rootfs.rtl83xx-data` | `rtl83xx-image` | Empty JFFS2 filling the whole `data` partition. Inside the factory `.swu`. |
-| `rtl83xx-image-rtl83xx.rootfs.squashfs-xz` | `rtl83xx-image` | Flash root filesystem. |
-| `rtl83xx-image-initramfs-rtl83xx.cpio.gz` | `rtl83xx-image-initramfs` | Initramfs bundled into the TFTP kernel. |
-| `vmlinux.bin-initramfs-rtl83xx.bin`, `vmlinux.bin-rtl83xx.bin` | `virtual/kernel` | Raw kernels, before compression and rt-loader. |
+| **`ethernet-switch-os-initramfs-zyxel-gs1900-8-a1.bin`** | `rtl83xx-bootimage` | TFTP boot with `bootm`. Kernel with the initramfs bundled in, runs entirely from RAM. Used for the first install and for recovery. |
+| **`ethernet-switch-os-initramfs-zyxel-gs1900-8-a1-rt-loader.bin`** | `rtl83xx-bootimage` | Same payload without the uImage header. TFTP boot with `go`. |
+| **`ethernet-switch-os-swu-factory-zyxel-gs1900-8-a1.swu`** | `ethernet-switch-os-swu-factory` | First install, uploaded from the TFTP initramfs. Writes `firmware` and wipes `data`. |
+| **`ethernet-switch-os-swu-upgrade-zyxel-gs1900-8-a1.swu`** | `ethernet-switch-os-swu-upgrade` | Update of a flashed system. Rewrites `firmware`, keeps `data`. |
+| `ethernet-switch-os-kernel-zyxel-gs1900-8-a1.bin` | `rtl83xx-bootimage` | Flash kernel, no initramfs. The head of the `firmware` partition (`RTL_FLASH_UIMAGE`). |
+| `rtl83xx-image-zyxel-gs1900-8-a1.rootfs.rtl83xx-fw` | `rtl83xx-image` | `firmware` partition content: the flash kernel, padded to 64k, then the squashfs. Inside both `.swu`. |
+| `rtl83xx-image-zyxel-gs1900-8-a1.rootfs.rtl83xx-data` | `rtl83xx-image` | Empty JFFS2 filling the whole `data` partition. Inside the factory `.swu`. |
+| `rtl83xx-image-zyxel-gs1900-8-a1.rootfs.squashfs-xz` | `rtl83xx-image` | Flash root filesystem. |
+| `rtl83xx-image-initramfs-zyxel-gs1900-8-a1.cpio.gz` | `rtl83xx-image-initramfs` | Initramfs bundled into the TFTP kernel. |
+| `vmlinux.bin-initramfs-zyxel-gs1900-8-a1.bin`, `vmlinux.bin-zyxel-gs1900-8-a1.bin` | `virtual/kernel` | Raw kernels, before compression and rt-loader. |
 | `rtl8380_zyxel_gs1900-8-a1.dtb` | `virtual/kernel` | Device tree, appended to the kernel. |
 
 The files in bold are the ones you use; the rest are intermediate artifacts.
@@ -54,7 +67,7 @@ Serial console is 115200 8N1.
 
 ```
 rtk network on
-tftpboot 0x84f00000 192.168.1.12:uImage-initramfs-rtl83xx.bin
+tftpboot 0x84f00000 192.168.1.12:ethernet-switch-os-initramfs-zyxel-gs1900-8-a1.bin
 bootm 0x84f00000
 ```
 
@@ -64,7 +77,7 @@ use `0x8f000000` or higher — that is past the end of RAM.
 The alternative, if you prefer the headerless blob:
 
 ```
-tftpboot 0x84f00000 192.168.1.12:rtl-loader-initramfs-rtl83xx.bin
+tftpboot 0x84f00000 192.168.1.12:ethernet-switch-os-initramfs-zyxel-gs1900-8-a1-rt-loader.bin
 go 0x84f00000
 ```
 
@@ -87,7 +100,7 @@ There is no A/B slot: an upgrade rewrites the running firmware in place.
 
 ### Install and upgrade
 
-1. TFTP-boot `uImage-initramfs-rtl83xx.bin` (see above).
+1. TFTP-boot `ethernet-switch-os-initramfs-zyxel-gs1900-8-a1.bin` (see above).
 2. Check that U-Boot boots slot 0. `bootpartition` lives in the second
    environment, which `/etc/fw_env.config` deliberately does not list, so read
    it explicitly:

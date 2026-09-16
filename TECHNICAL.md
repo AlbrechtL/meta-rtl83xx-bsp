@@ -21,7 +21,8 @@ kernel-bin | append-dtb | rt-compress | rt-loader | uImage none
 | `uImage none` | `uboot-mkimage` + `uimage-setmagic.py` |
 
 Addresses: load = entry = `0x80100000`, uImage magic = `0x83800000`. Both come
-from `conf/machine/rtl83xx.conf` (`RTL_LOADADDR`, `RTL_UIMAGE_MAGIC`).
+from the machine configuration (`RTL_LOADADDR` in
+`conf/machine/include/rtl83xx.inc`, `RTL_UIMAGE_MAGIC` per board).
 
 Two loader variants are built from one payload. The raw one is compiled with
 `KERNEL_ADDR=0x80100000` so it can be started from anywhere; the uImage one
@@ -47,7 +48,7 @@ Check it holds after a kernel change:
 
 ```sh
 awk '$3=="_text"||$3=="__appended_dtb"{print}' .../linux-rtl83xx-tiny-build/System.map
-stat -Lc%s tmp/deploy/images/rtl83xx/vmlinux.bin-initramfs-rtl83xx.bin
+stat -Lc%s tmp/deploy/images/zyxel-gs1900-8-a1/vmlinux.bin-initramfs-zyxel-gs1900-8-a1.bin
 ```
 
 `__appended_dtb - _text` must equal the file size.
@@ -123,7 +124,7 @@ A complete base config removes the whole failure mode.
 The authoritative list of requested-but-dropped symbols:
 
 ```sh
-tmp/work-shared/rtl83xx/kernel-source/.kernel-meta/cfg/merge_config_build.log
+tmp/work-shared/zyxel-gs1900-8-a1/kernel-source/.kernel-meta/cfg/merge_config_build.log
 ```
 
 Do **not** just count `not in final .config` — with a complete base that number is in the
@@ -133,7 +134,7 @@ does not have. Only the entries whose *requested* value is `=y`/`=m` matter:
 ```sh
 python3 - <<'EOF'
 import re
-L = "tmp/work-shared/rtl83xx/kernel-source/.kernel-meta/cfg/merge_config_build.log"
+L = "tmp/work-shared/zyxel-gs1900-8-a1/kernel-source/.kernel-meta/cfg/merge_config_build.log"
 lines = open(L, errors="replace").read().splitlines()
 for i, l in enumerate(lines):
     m = re.match(r"Value requested for (CONFIG_\S+) not in final", l)
@@ -277,7 +278,7 @@ both. The image drops `/var/volatile` from fstab, because `mount -a` would
 otherwise stack an empty tmpfs over the directories created there.
 
 **An upgrade overwrites what SWUpdate runs from.** The kernel can drop and
-re-read squashfs pages at any time. On the flash system, `20-rtl83xx-mode`
+re-read squashfs pages at any time. On the flash system, `20-ethernet-switch-os-mode`
 first copies swupdate, its libraries, the musl loader, `/www` and busybox to
 `/run/swupdate-ram`. It then execs swupdate through the copied loader
 (`ld-musl-*.so.1 --library-path`). SWUpdate runs the `-p` post-update command
@@ -294,17 +295,17 @@ restart dialog, then syncs and runs `reboot -f`.
 
 **SWUpdate never reboots by itself.** With `reboot_enabled` the web UI shows
 "Restarting system." and SWUpdate runs `-p`. Without a `-p` nothing happens.
-In the initramfs, `20-rtl83xx-mode` passes `-p /sbin/reboot`.
+In the initramfs, `20-ethernet-switch-os-mode` passes `-p /sbin/reboot`.
 
 **SWUpdate needs `CONFIG_HASH_VERIFY` for the sha256 in the sw-descriptions.**
 Without it the parser rejects the description with "hash verification not
 enabled but hash supplied", which is followed by the misleading "Compatible SW
 not found". `HASH_VERIFY` depends on an SSL implementation, so
-`meta-ethernet-switch-os`'s `rtl83xx.cfg` selects openssl. That costs no flash,
+`meta-ethernet-switch-os`'s `ethernet-switch-os.cfg` selects openssl. That costs no flash,
 because clixon already ships libcrypto. Do not drop the hashes instead: with a
 single slot, the image has to be verified before `firmware` is erased.
 meta-swupdate derives `DEPENDS` (openssl among them) from that fragment at
-parse time. The swupdate bbappend therefore marks `rtl83xx.cfg` as a parse
+parse time. The swupdate bbappend therefore marks `ethernet-switch-os.cfg` as a parse
 dependency. Without that, an edit to it leaves the stale `DEPENDS` in the parse
 cache: `openssl/bio.h: No such file`, plus "basehash value changed".
 

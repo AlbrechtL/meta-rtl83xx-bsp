@@ -1,3 +1,13 @@
+# Settings shared by every Realtek RTL83xx switch. A machine .conf next to this
+# file requires it and adds what is board specific: the device tree, the uImage
+# magic the stock bootloader expects, and the flash geometry.
+
+# Puts "rtl83xx" into MACHINEOVERRIDES, so recipes can keep using
+# COMPATIBLE_MACHINE = "^rtl83xx$" and :rtl83xx overrides for the whole family
+# instead of naming every board.
+SOC_FAMILY = "rtl83xx"
+require conf/machine/include/soc-family.inc
+
 require conf/machine/include/mips/tune-mips-24k.inc
 
 TARGET_ARCH = "mips"
@@ -21,11 +31,6 @@ PREFERRED_PROVIDER_virtual/kernel = "linux-yocto-tiny"
 # do_bundle_initramfs.
 KERNEL_IMAGETYPE = "vmlinux.bin"
 
-# kernel.bbclass inherits kernel-devicetree unconditionally, so setting this is
-# enough to get the DTB built and deployed. The .dts is added to the kernel
-# tree by 0002-realtek-dts-add-zyxel-gs1900-8-a1-*.patch.
-KERNEL_DEVICETREE = "realtek/rtl8380_zyxel_gs1900-8-a1.dtb"
-
 # -----------------------------------------------------------------------------
 # Initramfs
 # -----------------------------------------------------------------------------
@@ -44,7 +49,7 @@ SERIAL_CONSOLES = "115200;ttyS0"
 
 # Headless: the only console is the serial port. busybox-inittab defaults
 # USE_VT ?= "1" and then adds a "getty 38400 tty1" line, but OpenWrt's config
-# leaves CONFIG_VT off (rightly -- this board has no VT), so /dev/tty1 never
+# leaves CONFIG_VT off (rightly -- these boards have no VT), so /dev/tty1 never
 # exists and init respawns that getty forever:
 #   can't open /dev/tty1: No such file or directory
 USE_VT = "0"
@@ -54,6 +59,12 @@ USE_VT = "0"
 # reproducibility, which makes every build look identical on the console.
 KERNEL_DEBUG_TIMESTAMPS = "1"
 
+# The boards have no RTC and the shared kernel config is built without
+# RTC_CLASS. The "rtc" default machine feature would add busybox-hwclock to
+# packagegroup-core-boot, whose hwclock.sh then fails on every boot:
+#   hwclock: can't open '/dev/misc/rtc': No such file or directory
+MACHINE_FEATURES_OPTED_OUT += "rtc"
+
 # -----------------------------------------------------------------------------
 # rt-loader / boot image
 # -----------------------------------------------------------------------------
@@ -62,36 +73,25 @@ KERNEL_DEBUG_TIMESTAMPS = "1"
 # KERNEL_ENTRY is not set upstream, so entry == load.
 RTL_LOADADDR ?= "0x80100000"
 
-# uImage magic expected by the stock Zyxel bootloader and by the in-kernel
-# mtdsplit_uimage parser (OpenWrt: UIMAGE_MAGIC in realtek/image/common.mk).
-RTL_UIMAGE_MAGIC ?= "0x83800000"
-
-RTL_DTB ?= "rtl8380_zyxel_gs1900-8-a1.dtb"
-
-# The board has no RTC and the kernel is built without RTC_CLASS. The "rtc"
-# default machine feature would add busybox-hwclock to packagegroup-core-boot,
-# whose hwclock.sh then fails on every boot:
-#   hwclock: can't open '/dev/misc/rtc': No such file or directory
-MACHINE_FEATURES_OPTED_OUT += "rtc"
-
 EXTRA_IMAGEDEPENDS += "rtl83xx-bootimage"
 
 # -----------------------------------------------------------------------------
-# Flash image
+# Deployed image names
 # -----------------------------------------------------------------------------
-# Partition map of the GS1900 16 MiB SPI-NOR (rtl8380_zyxel_gs1900.dtsi, as
-# changed by 0006):
+# The BSP boots on its own, so the artifacts are named after whatever distro
+# built them rather than after a layer the BSP does not depend on. With
+# meta-ethernet-switch-os that reads
 #
-#   0x000000 u-boot       0x40000  read-only, never written
-#   0x040000 u-boot-env   0x10000
-#   0x050000 u-boot-env2  0x10000  "bootpartition", 0 boots 0x260000
-#   0x060000 data        0x200000  JFFS2 overlay upper layer, kept on upgrade
-#   0x260000 firmware    0xda0000  uImage | pad to erase block | squashfs
+#   ethernet-switch-os-initramfs-<machine>.bin           TFTP boot / installer
+#   ethernet-switch-os-initramfs-<machine>-rt-loader.bin same, no uImage header
+#   ethernet-switch-os-kernel-<machine>.bin              flash kernel
 #
-# "firmware" is OpenWrt's merge of the two stock 6976k slots (commit
-# 35acdbe909), so there is no A/B. The erase block is 64k because
-# CONFIG_MTD_SPI_NOR_USE_4K_SECTORS is off.
+# RTL_FLASH_UIMAGE is set here, not in the recipe, because both
+# rtl83xx-bootimage (which deploys the file) and image_types_rtl83xx (which
+# reads it back) need the same name, and the image recipe does not inherit
+# kernel-artifact-names. ".bin" is KERNEL_IMAGE_BIN_EXT's default, spelled out
+# for the same reason.
+RTL_IMAGE_BASENAME ?= "${DISTRO}"
+RTL_FLASH_UIMAGE ?= "${RTL_IMAGE_BASENAME}-kernel-${MACHINE}.bin"
+
 IMAGE_CLASSES += "image_types_rtl83xx"
-RTL_FIRMWARE_SIZE ?= "0xda0000"
-RTL_DATA_SIZE ?= "0x200000"
-RTL_FLASH_ERASEBLOCK ?= "0x10000"

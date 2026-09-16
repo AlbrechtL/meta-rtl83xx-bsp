@@ -1,4 +1,4 @@
-# Flash images for the RTL83xx partition map in conf/machine/rtl83xx.conf.
+# Flash images for the RTL83xx partition map in the machine configuration.
 #
 # rtl83xx-fw    Contents of the "firmware" partition:
 #
@@ -17,7 +17,8 @@
 RTL_FIRMWARE_SIZE ?= "0xda0000"
 RTL_DATA_SIZE ?= "0x200000"
 RTL_FLASH_ERASEBLOCK ?= "0x10000"
-RTL_FLASH_UIMAGE ?= "uImage-${MACHINE}.bin"
+RTL_IMAGE_BASENAME ?= "${DISTRO}"
+RTL_FLASH_UIMAGE ?= "${RTL_IMAGE_BASENAME}-kernel-${MACHINE}.bin"
 
 IMAGE_TYPES += "rtl83xx-fw rtl83xx-data"
 
