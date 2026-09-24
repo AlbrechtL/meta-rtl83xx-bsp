@@ -4,16 +4,7 @@
 > the help of AI. It has not undergone thorough review or hardening, and
 > should not be assumed suitable for production use.
 
-Part of **Ethernet Switch OS**. The build lives in
-[ethernet-switch-os](https://github.com/AlbrechtL/ethernet-switch-os), which
-checks this layer out with [kas](https://kas.readthedocs.io/) and builds the
-images. The other pieces are
-[meta-ethernet-switch-os](https://github.com/AlbrechtL/meta-ethernet-switch-os)
-(the distro and userspace),
-[clixon-switch-rs](https://github.com/AlbrechtL/clixon-switch-rs) (its backend
-plugin) and [rtl838x-qemu](https://github.com/AlbrechtL/rtl838x-qemu), which
-emulates an RTL838x well enough to boot these images and switch real frames
-between eight ports.
+Part of **Ethernet Switch OS**. See [ethernet-switch-os](https://github.com/AlbrechtL/ethernet-switch-os),
 
 Yocto BSP layer for Realtek RTL83xx switches. Supported board: **Zyxel GS1900-8 A1**
 (RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
@@ -30,44 +21,12 @@ the uImage magic and the flash geometry. Another RTL83xx board is a new
 `COMPATIBLE_MACHINE = "^rtl83xx$"`.
 
 The layer is hardware-only: kernel, boot image, and flash layout. It boots to a
-shell on its own. Networking, management (clixon/RESTCONF), SSH and SWUpdate
-live in the sibling `meta-ethernet-switch-os` layer.
+shell on its own.
 
 See [TECHNICAL.md](TECHNICAL.md) for how the boot image is built, the kernel
 configuration layout, and known traps/pitfalls.
 
-## Building the images
-
-```sh
-git clone https://github.com/AlbrechtL/ethernet-switch-os
-cd ethernet-switch-os
-make container      # the development image, once
-make build          # = bitbake ethernet-switch-os-swu-factory ethernet-switch-os-swu-upgrade
-```
-
-That is the whole build: kas checks this layer out into
-`layers/meta-rtl83xx-bsp` as an ordinary clone of `master`, alongside
-openembedded-core and the rest, and selects the machine. Which board is built
-is one file there, `kas/board/zyxel-gs1900-8-a1.yml`; a second RTL83xx board
-needs a `.conf` here and a copy of that file.
-
-Inside `make shell`, individual targets work as usual:
-
-```sh
-bitbake rtl83xx-bootimage    # TFTP boot image, this layer alone
-```
-
-The `.swu` recipes live in `meta-ethernet-switch-os`, and pull in
-`rtl83xx-image` and `rtl83xx-bootimage` automatically, so building them alone
-builds everything.
-
-Output lands in `build/tmp/deploy/images/zyxel-gs1900-8-a1/`. The names below are
-the stable symlinks; each points to a timestamped file next to it.
-
-The boot images are named after the distro that built them
-(`RTL_IMAGE_BASENAME`, default `${DISTRO}`), so a BSP-only `poky-tiny` build
-produces `poky-tiny-initramfs-...` instead. The names below are what
-`meta-ethernet-switch-os` produces.
+## Images
 
 | File | Built by | What it is for |
 |---|---|---|
@@ -141,16 +100,3 @@ There is no A/B slot: an upgrade rewrites the running firmware in place.
 Later updates: upload the upgrade `.swu` to the running flash system. The
 board reboots by itself. If an upgrade is interrupted, TFTP-boot the
 initramfs again and repeat the factory install.
-
-## Recipes
-
-| Recipe | Role |
-|---|---|
-| `recipes-bsp/rt-loader/rt-loader_git.bb` | stages the loader **sources**; does not compile |
-| `recipes-bsp/rtl83xx-bootimage/` | compresses, links the loader around the kernel, wraps in uImage |
-| `recipes-core/images/rtl83xx-image-initramfs.bb` | the TFTP-bootable rootfs |
-| `recipes-core/images/rtl83xx-image.bb` | the flashable rootfs (squashfs + JFFS2 overlay) |
-| `recipes-core/rtl83xx-overlay-init/` | pivots the flash rootfs onto a JFFS2 overlay |
-| `recipes-bsp/rtl83xx-ubootenv-config/` | `/etc/fw_env.config` for the main U-Boot environment |
-| `classes-recipe/image_types_rtl83xx.bbclass` | the `rtl83xx-fw` and `rtl83xx-data` image types |
-| `recipes-kernel/linux/linux-yocto-tiny_%.bbappend` | patches, defconfig, kernel metadata fragments |
