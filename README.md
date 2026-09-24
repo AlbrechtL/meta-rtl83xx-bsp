@@ -4,10 +4,23 @@
 > the help of AI. It has not undergone thorough review or hardening, and
 > should not be assumed suitable for production use.
 
+Part of **Ethernet Switch OS**. The build lives in
+[ethernet-switch-os](https://github.com/AlbrechtL/ethernet-switch-os), which
+checks this layer out with [kas](https://kas.readthedocs.io/) and builds the
+images. The other pieces are
+[meta-ethernet-switch-os](https://github.com/AlbrechtL/meta-ethernet-switch-os)
+(the distro and userspace),
+[clixon-switch-rs](https://github.com/AlbrechtL/clixon-switch-rs) (its backend
+plugin) and [rtl838x-qemu](https://github.com/AlbrechtL/rtl838x-qemu), which
+emulates an RTL838x well enough to boot these images and switch real frames
+between eight ports.
+
 Yocto BSP layer for Realtek RTL83xx switches. Supported board: **Zyxel GS1900-8 A1**
 (RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
 
-`MACHINE = "zyxel-gs1900-8-a1"`, `DISTRO = "poky-tiny"`.
+`MACHINE = "zyxel-gs1900-8-a1"`. The layer builds against any distro; the
+product uses `ethernet-switch-os`, and plain `poky-tiny` gives a BSP-only
+image that boots to a shell.
 
 Settings shared by the whole SoC family live in
 `conf/machine/include/rtl83xx.inc`; a machine `.conf` adds the device tree,
@@ -26,16 +39,27 @@ configuration layout, and known traps/pitfalls.
 ## Building the images
 
 ```sh
-cd build
-bitbake rtl83xx-bootimage    # TFTP boot image
-bitbake ethernet-switch-os-swu-factory \
-        ethernet-switch-os-swu-upgrade    # SWUpdate packages
+git clone https://github.com/AlbrechtL/ethernet-switch-os
+cd ethernet-switch-os
+make container      # the development image, once
+make build          # = bitbake ethernet-switch-os-swu-factory ethernet-switch-os-swu-upgrade
 ```
 
-The `.swu` recipes live in `meta-ethernet-switch-os`, so that layer is
-required for the second command. They pull in `rtl83xx-image` and
-`rtl83xx-bootimage` automatically, so the second command alone builds
-everything.
+That is the whole build: kas checks this layer out into
+`layers/meta-rtl83xx-bsp` as an ordinary clone of `master`, alongside
+openembedded-core and the rest, and selects the machine. Which board is built
+is one file there, `kas/board/zyxel-gs1900-8-a1.yml`; a second RTL83xx board
+needs a `.conf` here and a copy of that file.
+
+Inside `make shell`, individual targets work as usual:
+
+```sh
+bitbake rtl83xx-bootimage    # TFTP boot image, this layer alone
+```
+
+The `.swu` recipes live in `meta-ethernet-switch-os`, and pull in
+`rtl83xx-image` and `rtl83xx-bootimage` automatically, so building them alone
+builds everything.
 
 Output lands in `build/tmp/deploy/images/zyxel-gs1900-8-a1/`. The names below are
 the stable symlinks; each points to a timestamped file next to it.
