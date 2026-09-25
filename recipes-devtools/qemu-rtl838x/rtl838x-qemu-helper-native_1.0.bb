@@ -6,7 +6,7 @@
 #
 #   tmp/work/x86_64-linux/rtl838x-qemu-helper-native/*/recipe-sysroot-native/
 #
-# which is where ethernet-switch-os' scripts/rtl838x-qemu runs the emulator
+# which is where ethernet-switch-os' scripts/mips-rtl838x-qemu runs the emulator
 # from. The same trick as oe-core's qemu-helper-native, which runqemu uses.
 
 SUMMARY = "Sysroot for running the RTL838x QEMU machine"

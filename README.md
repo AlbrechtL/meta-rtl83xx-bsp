@@ -94,7 +94,7 @@ a sysroot to run from. The binary is named `qemu-system-mips-rtl838x` so it
 does not collide with oe-core's `qemu-system-native`. Every `-nic` becomes
 the next front port, `lan1` first. There is no flash: only the initramfs
 image works, and nothing survives a reboot.
-ethernet-switch-os' `scripts/rtl838x-qemu` wraps all this, with networking.
+ethernet-switch-os' `scripts/mips-rtl838x-qemu` wraps all this, with networking.
 
 ## Flash image
 
