@@ -4,10 +4,15 @@ KMACHINE:rtl83xx = "rtl83xx"
 COMPATIBLE_MACHINE .= "|rtl83xx"
 
 
-# Base configuration: OpenWrt's generic + rtl838x configs, merged the way
-# OpenWrt itself does it. kernel-yocto.bbclass picks "defconfig" out of SRC_URI
-# and uses it as the merge_config.sh base.
+# Base configuration: the savedefconfig form of OpenWrt's generic + rtl838x
+# configs. kernel-yocto.bbclass picks "defconfig" out of SRC_URI and uses it as
+# the merge_config.sh base.
 SRC_URI += "file://defconfig"
+
+# A savedefconfig leaves out every symbol that is at its Kconfig default, so the
+# symbols it does not list have to take those defaults. linux-yocto-tiny's
+# --allnoconfig would force them all to n instead (CONFIG_NET among them).
+KCONFIG_MODE:rtl83xx = "--alldefconfig"
 
 # Board/policy deltas, shipped as kernel metadata so scc can resolve the .scc
 # and its .cfg fragments as one unit. type=kmeta puts the directory on scc's

@@ -74,42 +74,38 @@ kernel. `rtl83xx-image-initramfs.bb` clears `EXTRA_IMAGEDEPENDS` locally.
 
 Two layers, and the split matters:
 
-**`files/defconfig` is generated, not hand-written.** It is OpenWrt's generic +
-rtl838x configs merged with OpenWrt's own command (`include/target.mk:172`):
-
-```sh
-cd <openwrt>
-./scripts/kconfig.pl + target/linux/generic/config-6.18 \
-                       target/linux/realtek/rtl838x/config-6.18
-```
-
-8449 lines, 731 `=y`, and — crucially — 7617 explicit `# ... is not set`. Regenerate it
-when you bump the OpenWrt tree; keep the header comment.
+**`files/defconfig` is generated, not hand-written.** It is the `savedefconfig` form of
+OpenWrt's generic + rtl838x configs: only the symbols that differ from their Kconfig
+default, about 230 lines. The bbappend sets `KCONFIG_MODE:rtl83xx = "--alldefconfig"`, so
+every symbol it does not list takes its default. Keep the header comment when you
+regenerate it.
 
 **`files/rtl83xx-kmeta/features/rtl83xx/` holds the deltas**, shipped as kernel metadata
 (`SRC_URI += "file://rtl83xx-kmeta;type=kmeta;destsuffix=rtl83xx-kmeta"` plus
 `KERNEL_FEATURES`). `rtl83xx.scc` pulls in two fragments:
 
-- `rtl83xx-hardware.cfg` (`kconf hardware`) — the board's must-have symbols. These are
-  *already* in `defconfig`; the duplication is a tripwire, because a dropped
-  `kconf hardware` symbol is reported by the audit even at `KCONF_AUDIT_LEVEL=1`.
+- `rtl83xx-hardware.cfg` (`kconf hardware`) — the board's must-have symbols. A dropped
+  `kconf hardware` symbol is reported by the audit even at `KCONF_AUDIT_LEVEL=1`, so
+  this file works as a tripwire.
 - `rtl83xx-yocto.cfg` (`kconf non-hardware`) — only where this build genuinely differs
   from OpenWrt: devtmpfs, `PRINTK_TIME`, `MODULES` off, `DEBUG_INFO_NONE`.
 
-Anything OpenWrt already gets right belongs in neither file.
+`gpio-keys.cfg` adds the input subsystem for boards whose buttons are `gpio-keys-polled`.
 
-### Why the base config must be complete
+**Every option is defined in one place.** A symbol that is set in a fragment is removed
+from `defconfig`, and `.kernel-meta/cfg/redefinition.txt` stays empty. The one exception is
+`# CONFIG_INPUT is not set`: `INPUT` defaults to `y`, so the base has to switch it off,
+and `gpio-keys.cfg` switches it back on.
 
-`KCONFIG_MODE = "--allnoconfig"` does **not** strip symbols that are present in the merged
-file — `conf_set_all_new_symbols()` skips anything with a user value
-(`scripts/kconfig/conf.c:236`). It forces every **absent** symbol to `n`, ignoring its
-Kconfig `default y`. So the danger is indirect, through dependencies you did not list.
+### Why `--alldefconfig`, not the tiny recipe's `--allnoconfig`
 
-That is exactly how ethernet was lost for a while: `CONFIG_NET` lives only in OpenWrt's
-generic half, which had not been copied. `NET` absent → `n`; `NETDEVICES` *was* requested
-but `depends on NET`, so it was dropped **silently**; and the whole DSA/PHY/ethernet tree
-went with it. The single visible symptom was one warning, because `REGMAP_MDIO` sits
-outside the NET menu and still selected `MDIO_BUS`:
+`--allnoconfig` forces every symbol that is **not listed** to `n` and ignores its
+Kconfig `default y`. A `savedefconfig` leaves out exactly those symbols, so under
+`--allnoconfig` they would all be lost, `CONFIG_NET` among them.
+
+That is how ethernet was lost once. `NET` was absent, so it became `n`. `NETDEVICES`
+*was* requested but `depends on NET`, so it was dropped **silently**, and the whole
+DSA/PHY/ethernet tree went with it. The only visible symptom was one warning:
 
 ```
 WARNING: unmet direct dependencies detected for MDIO_BUS
@@ -117,36 +113,35 @@ WARNING: unmet direct dependencies detected for MDIO_BUS
   Selected by [y]: REGMAP_MDIO [=y]
 ```
 
-A complete base config removes the whole failure mode.
+`--alldefconfig` gives each unlisted symbol its default, so `savedefconfig` and the
+merge round-trip to the same `.config`.
+
+### Regenerating after an OpenWrt bump
+
+1. Merge the full config with OpenWrt's own command (`include/target.mk:172`):
+
+   ```sh
+   cd <openwrt>
+   ./scripts/kconfig.pl + target/linux/generic/config-6.18 \
+                          target/linux/realtek/rtl838x/config-6.18 > /tmp/openwrt.config
+   ```
+
+2. Use it temporarily as `files/defconfig`. Since it lists every symbol, the mode does
+   not matter for it.
+3. For `zyxel-gs1900-8-a1`, run `bitbake -c kernel_configcheck virtual/kernel`, then
+   `bitbake -c savedefconfig virtual/kernel`. The result is in
+   `${B}/defconfig` (`linux-zyxel_gs1900_8_a1-tiny-build/defconfig`).
+4. Delete from it every symbol that a `rtl83xx-kmeta` `.cfg` sets, except
+   `# CONFIG_INPUT is not set`. Put the header back, and commit.
+5. Rebuild both rtl83xx boards and diff their `.config` against the previous one.
 
 ### Checking config changes
 
-The authoritative list of requested-but-dropped symbols:
-
-```sh
-tmp/work-shared/zyxel-gs1900-8-a1/kernel-source/.kernel-meta/cfg/merge_config_build.log
-```
-
-Do **not** just count `not in final .config` — with a complete base that number is in the
-thousands and almost all of it is `# CONFIG_X is not set` for symbols this kernel simply
-does not have. Only the entries whose *requested* value is `=y`/`=m` matter:
-
-```sh
-python3 - <<'EOF'
-import re
-L = "tmp/work-shared/zyxel-gs1900-8-a1/kernel-source/.kernel-meta/cfg/merge_config_build.log"
-lines = open(L, errors="replace").read().splitlines()
-for i, l in enumerate(lines):
-    m = re.match(r"Value requested for (CONFIG_\S+) not in final", l)
-    if m and lines[i+1].rstrip().endswith(("=y", "=m")):
-        print(m.group(1))
-EOF
-```
-
-~205 today, and all of it is benign: other architectures (ARM/PPC/x86 symbols, since
-OpenWrt's generic config is arch-neutral), subsystems whose parent menu is off
-(SND/USB/SCSI/NFS/Bluetooth), and OpenWrt-patch-added symbols whose patches are not
-enabled. What must stay empty is the hardware list — see the tripwire check above.
+`.kernel-meta/cfg/` in `tmp/work-shared/<machine>/kernel-source/` holds the reports:
+`redefinition.txt` (an option set in more than one place), `invalid.txt` (a symbol this
+kernel does not have) and `mismatch.txt` (requested but not in the final `.config`). The
+full log is `merge_config_build.log`. For zyxel-gs1900-8-a1 none of them lists anything
+today. For albrecht-rtl8382mi-test only the intended `CONFIG_INPUT` override is listed.
 
 `KCONF_AUDIT_LEVEL = "2"` in the bbappend makes `do_kernel_configcheck` write
 `.kernel-meta/cfg/mismatch.txt` and warn. The default of `1` passes `--classify` to
