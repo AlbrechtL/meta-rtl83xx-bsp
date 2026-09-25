@@ -395,7 +395,7 @@ Signed-off-by: Antoine Tenart <antoine.tenart@bootlin.com>
  	select MDIO_I2C
 +	select MDIO_SMBUS
  
- comment "Switch configuration API + drivers"
+ comment "MII PHY device drivers"
  
 --- a/include/linux/mdio/mdio-i2c.h
 +++ b/include/linux/mdio/mdio-i2c.h

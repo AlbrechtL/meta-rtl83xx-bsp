@@ -191,11 +191,12 @@ grep -rl "drivers/net/phy/phylink.c" files/openwrt-generic-patches/*/
 
 **linux-yocto's base is not OpenWrt's base.** `737-02` still failed after every OpenWrt
 prerequisite was on, because it expects `goto free_pl;` in `phylink_create()` while
-linux-yocto 6.18.39 still has the open-coded `kfree(pl); return ERR_PTR(ret);`. The fix
-was to backport the one upstream commit that introduces the label
-(`0005-net-phylink-put-link_gpio-if-phylink_create-fails.patch`, cherry-picked from the
-linux-yocto tree) rather than refresh three OpenWrt patches. Prefer that direction when
-the gap is a single upstream commit.
+linux-yocto 6.18.39 still had the open-coded `kfree(pl); return ERR_PTR(ret);`. The fix
+was to backport the one upstream commit that introduces the label (0fe1e3e8f338, "net:
+phylink: put link_gpio if phylink_create fails") as a BSP patch rather than refresh three
+OpenWrt patches. Prefer that direction when the gap is a single upstream commit, and drop
+the backport again once linux-yocto picks it up through stable -- this one arrived with
+6.18.48 and the patch was removed, since it no longer applies on top of itself.
 
 **Headless means `USE_VT = "0"`.** `busybox-inittab` defaults `USE_VT ?= "1"` and then
 appends a `getty 38400 tty1` line. OpenWrt's config leaves `CONFIG_VT` off, which is right
@@ -322,8 +323,7 @@ writes it at all: there is no `bootenv`, and both sw-descriptions turn off
   poky-tiny standard set. Expect a lot of "[INFO]: the following symbols were
   not found in the active configuration:" warnings until then.
 - Verify why `0004-realtek-dts-replace-rtl838x.dtsi-with-the-OpenWrt-ver.patch`
-  and `0005-net-phylink-put-link_gpio-if-phylink_create-fails.patch` under
-  `recipes-kernel/linux/files/` are actually necessary — added while chasing a
+  under `recipes-kernel/linux/files/` is actually necessary — added while chasing a
   build failure, not yet re-checked from first principles.
 
 Find the next size offender with `readelf -d` over the rootfs (`NEEDED`

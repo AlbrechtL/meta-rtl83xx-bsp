@@ -31,7 +31,6 @@ SRC_URI += " \
     file://0002-realtek-dts-add-zyxel-gs1900-8-a1-device-tree-copied.patch \
     file://0003-Add-mtd-split-from-OpenWrt-f0d3e332e5f839508f77fba8c.patch \
     file://0004-realtek-dts-replace-rtl838x.dtsi-with-the-OpenWrt-ver.patch \
-    file://0005-net-phylink-put-link_gpio-if-phylink_create-fails.patch \
     file://0006-realtek-dts-gs1900-data-partition-and-flash-root.patch \
     file://0007-mtd-mtdsplit-add-uimage-dt-bindings-header-from-OpenWrt.patch \
 "
