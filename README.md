@@ -73,6 +73,29 @@ go 0x84f00000
 The two files are **not** interchangeable — `bootm` on the raw blob gives
 `Bad Header Checksum`, because that variant deliberately has no uImage header.
 
+## QEMU
+
+`qemu-rtl838x-native` builds QEMU with the `rtl838x` machine from
+[rtl838x-qemu](https://github.com/AlbrechtL/rtl838x-qemu), which emulates the
+GS1900-8 closely enough to boot the TFTP image unchanged:
+
+```
+bitbake rtl838x-qemu-helper-native
+qemu=$(ls tmp/work/x86_64-linux/rtl838x-qemu-helper-native/*/recipe-sysroot-native/usr/bin/qemu-system-mips-rtl838x)
+$qemu -M rtl838x -m 128 -nographic -no-reboot \
+    -kernel tmp/deploy/images/zyxel-gs1900-8-a1/ethernet-switch-os-initramfs-zyxel-gs1900-8-a1.bin
+```
+
+The recipe takes the QEMU release tarball that rtl838x-qemu pins as its
+submodule and applies rtl838x-qemu's models and patch to it; the version in
+its file name and `SRCREV_rtl838x` go together.
+`rtl838x-qemu-helper-native` only gathers the emulator and its libraries into
+a sysroot to run from. The binary is named `qemu-system-mips-rtl838x` so it
+does not collide with oe-core's `qemu-system-native`. Every `-nic` becomes
+the next front port, `lan1` first. There is no flash: only the initramfs
+image works, and nothing survives a reboot.
+ethernet-switch-os' `scripts/rtl838x-qemu` wraps all this, with networking.
+
 ## Flash image
 
 Layout of the 16 MiB SPI-NOR:

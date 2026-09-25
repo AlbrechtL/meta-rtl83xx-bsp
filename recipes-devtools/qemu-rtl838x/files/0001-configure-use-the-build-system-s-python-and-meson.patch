@@ -1,0 +1,47 @@
+From: Albrecht Lohofener <albrechtloh@gmx.de>
+Subject: [PATCH] configure: use the build system's python and meson, no venv
+
+QEMU's configure creates a Python venv and installs its vendored meson
+into it. In a bitbake build the sysroot's python3-native and meson-native
+are the ones to use. Combines oe-core's two qemu patches
+0010-configure-lookup-meson-exutable-from-PATH.patch and
+0011-qemu-Ensure-pip-and-the-python-venv-aren-t-used-for-.patch,
+refreshed for QEMU 11.1.1.
+
+Upstream-Status: Inappropriate [oe specific]
+Signed-off-by: Albrecht Lohofener <albrechtloh@gmx.de>
+---
+ configure | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+--- a/configure
++++ b/configure
+@@ -937,14 +937,14 @@
+ echo "python determined to be '$python'"
+ echo "python version: $($python --version)"
+ 
+-python="$($python -B "${source_path}/python/scripts/mkvenv.py" create pyvenv)"
++python=python3
+ if test "$?" -ne 0 ; then
+     error_exit "python venv creation failed"
+ fi
+ 
+ # Suppress writing compiled files
+ python="$python -B"
+-mkvenv="$python ${source_path}/python/scripts/mkvenv.py"
++mkvenv=true
+ 
+ # Finish preparing the virtual environment using vendored .whl files.
+ # Even if PyPI is allowed, we disallow it here to force installation
+@@ -967,10 +967,7 @@
+     fi
+ }
+ 
+-meson="$(cd pyvenv/bin; get_pwd)/meson"
+-if [ -f "$meson$EXESUF" ]; then
+-  meson="$meson$EXESUF"
+-fi
++meson=`which meson`
+ 
+ # On Haiku, meson might show up in a "non-packaged" subfolder instead, see
+ # https://github.com/haiku/haiku/blob/r1beta5/docs/user/storage/storageintro.dox
