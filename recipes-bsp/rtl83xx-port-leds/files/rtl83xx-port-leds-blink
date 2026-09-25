@@ -1,0 +1,4 @@
+#!/bin/sh
+# Port LEDs to the upgrade pattern, as a command without arguments for
+# SWUpdate's -P (pre-update command).
+exec /etc/init.d/rtl83xx-port-leds blink

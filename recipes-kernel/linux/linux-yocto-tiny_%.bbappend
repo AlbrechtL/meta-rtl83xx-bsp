@@ -15,6 +15,12 @@ SRC_URI += "file://defconfig"
 SRC_URI += "file://rtl83xx-kmeta;type=kmeta;destsuffix=rtl83xx-kmeta"
 KERNEL_FEATURES:append:rtl83xx = " features/rtl83xx/rtl83xx.scc"
 
+# Boards whose buttons or DIP switches sit behind gpio-keys-polled. The shared
+# configuration leaves the input subsystem out (OpenWrt handles buttons with
+# its own gpio-button-hotplug module), so it is added only where a board uses
+# it, and the other kernels do not grow.
+KERNEL_FEATURES:append:albrecht-rtl8382mi-test = " features/rtl83xx/gpio-keys.scc"
+
 # The default of 1 passes --classify to symbol_why.py, which filtered the
 # mismatch report away entirely while the whole networking stack was silently
 # being dropped. At 2 every requested-but-missing symbol is reported and
@@ -33,6 +39,8 @@ SRC_URI += " \
     file://0004-realtek-dts-replace-rtl838x.dtsi-with-the-OpenWrt-ver.patch \
     file://0006-realtek-dts-gs1900-data-partition-and-flash-root.patch \
     file://0007-mtd-mtdsplit-add-uimage-dt-bindings-header-from-OpenWrt.patch \
+    file://0008-realtek-dts-add-albrecht-rtl8382mi-test-device-tree.patch \
+    file://0009-realtek-dts-rtl8382mi-test-data-partition-and-flash-root.patch \
 "
 
 

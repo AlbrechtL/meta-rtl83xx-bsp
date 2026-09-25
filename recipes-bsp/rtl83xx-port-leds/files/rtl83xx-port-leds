@@ -1,0 +1,70 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          rtl83xx-port-leds
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: RTL838x port LED setup
+### END INIT INFO
+#
+# The stock loader of some RTL838x boards sets up the port LED controller only
+# after the kernel would have needed it, and the kernel has no driver for the
+# LED shift register. The rtl83xx DSA driver exposes the controller registers
+# in debugfs, which is all that is needed to hand the LEDs to the hardware.
+#
+#   start  hardware control: the LEDs show link and activity
+#   stop   software control, all port LEDs blinking (halt and reboot)
+#   blink  software control, the upgrade pattern (rtl83xx-port-leds-blink)
+#
+# The register values come from /etc/default/rtl83xx-port-leds. Nothing here
+# may keep the system from booting or updating, so every failure just ends
+# the script.
+
+LED_DIR=/sys/kernel/debug/rtl838x/led
+
+. /etc/default/rtl83xx-port-leds || exit 0
+
+led_dir() {
+    if [ ! -d "$LED_DIR" ]; then
+        grep -q ' /sys/kernel/debug debugfs ' /proc/mounts ||
+            mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
+    fi
+    [ -d "$LED_DIR" ]
+}
+
+# Software control of every port in PORT_LEDS_SW_MASK, each set to $1.
+sw_pattern() {
+    echo "$PORT_LEDS_SW_MASK" > "$LED_DIR/led0_sw_p_en_ctrl" || return 0
+    echo "$PORT_LEDS_SW_MASK" > "$LED_DIR/led1_sw_p_en_ctrl" || return 0
+    for p in $PORT_LEDS_PORTS; do
+        echo "$1" > "$LED_DIR/led_sw_p_ctrl.$(printf '%02d' "$p")" || return 0
+    done
+}
+
+case "$1" in
+    start)
+        led_dir || exit 0
+        echo "$PORT_LEDS_GLB_CTRL" > "$LED_DIR/led_glb_ctrl" || exit 0
+        echo "$PORT_LEDS_MODE_CTRL" > "$LED_DIR/led_mode_ctrl" || exit 0
+        echo "$PORT_LEDS_P_EN_CTRL" > "$LED_DIR/led_p_en_ctrl" || exit 0
+        # Hand the LEDs back from software to the hardware.
+        echo 0x00000000 > "$LED_DIR/led0_sw_p_en_ctrl" || exit 0
+        echo 0x00000000 > "$LED_DIR/led1_sw_p_en_ctrl" || exit 0
+        ;;
+    stop)
+        led_dir || exit 0
+        sw_pattern "$PORT_LEDS_REBOOT_PATTERN"
+        ;;
+    blink)
+        led_dir || exit 0
+        sw_pattern "$PORT_LEDS_UPGRADE_PATTERN"
+        ;;
+    restart|force-reload)
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|blink}"
+        exit 1
+        ;;
+esac
+
+exit 0

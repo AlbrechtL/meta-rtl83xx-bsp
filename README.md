@@ -6,10 +6,16 @@
 
 Part of **Ethernet Switch OS**. See [ethernet-switch-os](https://github.com/AlbrechtL/ethernet-switch-os),
 
-Yocto BSP layer for Realtek RTL83xx switches. Supported board: **Zyxel GS1900-8 A1**
-(RTL8380M, MIPS 4KEc, 128 MB RAM, big endian).
+Yocto BSP layer for Realtek RTL83xx switches (MIPS 4KEc, big endian).
+Supported boards:
 
-`MACHINE = "zyxel-gs1900-8-a1"`. The layer builds against any distro; the
+| Board | SoC | `MACHINE` |
+|---|---|---|
+| Zyxel GS1900-8 A1, 8 ports, 128 MB RAM | RTL8380M | `zyxel-gs1900-8-a1` |
+| Albrecht RTL8382MI test switch, 20 ports, 128 MB RAM (experimental) | RTL8382M | `albrecht-rtl8382mi-test` |
+
+The examples below use the GS1900; the file names of the other board follow
+the same pattern with its machine name. The layer builds against any distro; the
 product uses `ethernet-switch-os`, and plain `poky-tiny` gives a BSP-only
 image that boots to a shell.
 

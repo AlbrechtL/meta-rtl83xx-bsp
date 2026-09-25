@@ -1,0 +1,58 @@
+From 32fe2a125eb68ec79247a6c38f6c59c31cd82fe0 Mon Sep 17 00:00:00 2001
+From: Albrecht Lohofener <albrecht@albrechtloh.de>
+Date: Fri, 25 Sep 2026 08:16:34 +0200
+Subject: [PATCH] realtek: dts: rtl8382mi-test: data partition and flash
+ root bootargs
+
+Merge the two 1 MiB stock "jffs2_cfg"/"jffs2_log" partitions into one
+2 MiB "data" partition, which holds the JFFS2 upper layer of the root
+overlay. It is a partition of its own so that rewriting "firmware" during
+an upgrade leaves it alone. "firmware" (the stock RUNTIME1 + RUNTIME2
+slots) is unchanged: mtdsplit_uimage splits it into kernel and rootfs, and
+MTD_ROOTFS_ROOT_DEV makes "rootfs" the root device.
+
+bootargs add rootfstype=squashfs for that root and init=/sbin/overlay-init,
+which stacks the overlay before busybox init starts. A kernel with a bundled
+initramfs runs /init instead and ignores init=, so one DTB serves both the
+TFTP initramfs and the flash kernel.
+
+This is the same arrangement as the GS1900 (patch 0006).
+
+Upstream-Status: Inappropriate [meta-rtl83xx-bsp flash layout]
+Signed-off-by: Albrecht Lohofener <albrecht@albrechtloh.de>
+---
+ .../dts/realtek/rtl8382_albrecht_rtl8382mi-test.dts | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/arch/mips/boot/dts/realtek/rtl8382_albrecht_rtl8382mi-test.dts b/arch/mips/boot/dts/realtek/rtl8382_albrecht_rtl8382mi-test.dts
+index d7638c8..b9db46d 100644
+--- a/arch/mips/boot/dts/realtek/rtl8382_albrecht_rtl8382mi-test.dts
++++ b/arch/mips/boot/dts/realtek/rtl8382_albrecht_rtl8382mi-test.dts
+@@ -9,6 +9,10 @@
+ 	compatible = "albrecht,rtl8382mi-test", "realtek,rtl838x-soc";
+ 	model = "Albrecht RTL8382MI Test Switch";
+ 
++	chosen {
++		bootargs = "earlycon rootfstype=squashfs init=/sbin/overlay-init";
++	};
++
+ 	memory@0 {
+ 		device_type = "memory";
+ 		reg = <0x0 0x8000000>;
+@@ -111,13 +115,10 @@
+ 				reg = <0x000f0000 0x010000>;
+ 				read-only;
+ 			};
++			/* Stock "jffs2_cfg" + "jffs2_log", used as the JFFS2 overlay upper layer */
+ 			partition@100000 {
+-				label = "jffs2_cfg";
+-				reg = <0x00100000 0x100000>;
+-			};
+-			partition@200000 {
+-				label = "jffs2_log";
+-				reg = <0x00200000 0x100000>;
++				label = "data";
++				reg = <0x00100000 0x200000>;
+ 			};
+ 			partition@300000 {
+ 				label = "firmware";
