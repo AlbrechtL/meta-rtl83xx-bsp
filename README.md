@@ -77,7 +77,8 @@ The two files are **not** interchangeable — `bootm` on the raw blob gives
 
 `qemu-rtl838x-native` builds QEMU with the `rtl838x` machine from
 [rtl838x-qemu](https://github.com/AlbrechtL/rtl838x-qemu), which emulates the
-GS1900-8 closely enough to boot the TFTP image unchanged:
+GS1900-8, its SPI-NOR flash included, closely enough to boot the TFTP image
+and the flash image unchanged. The TFTP image:
 
 ```
 bitbake rtl838x-qemu-helper-native
@@ -86,14 +87,30 @@ $qemu -M rtl838x -m 128 -nographic -no-reboot \
     -kernel tmp/deploy/images/zyxel-gs1900-8-a1/ethernet-switch-os-initramfs-zyxel-gs1900-8-a1.bin
 ```
 
+The flash is `-drive if=mtd`, a raw file of exactly 16 MiB laid out as in
+[Flash image](#flash-image). Without `-kernel` the machine boots from it the
+way U-Boot does with `bootpartition=0`, on every reset, so the upgrade `.swu`
+works and a reboot starts the new firmware. A flash as a factory install
+leaves it:
+
+```
+d=tmp/deploy/images/zyxel-gs1900-8-a1
+tr '\000' '\377' < /dev/zero | head -c 16M > flash.bin
+dd if=$d/rtl83xx-image-zyxel-gs1900-8-a1.rootfs.rtl83xx-data of=flash.bin bs=64k seek=6 conv=notrunc
+dd if=$d/rtl83xx-image-zyxel-gs1900-8-a1.rootfs.rtl83xx-fw of=flash.bin bs=64k seek=38 conv=notrunc
+$qemu -M rtl838x -m 128 -nographic -drive if=mtd,format=raw,file=flash.bin
+```
+
+Or install into an erased flash from the TFTP image with the factory `.swu`,
+as on the real switch.
+
 The recipe takes the QEMU release tarball that rtl838x-qemu pins as its
 submodule and applies rtl838x-qemu's models and patch to it; the version in
 its file name and `SRCREV_rtl838x` go together.
 `rtl838x-qemu-helper-native` only gathers the emulator and its libraries into
 a sysroot to run from. The binary is named `qemu-system-mips-rtl838x` so it
 does not collide with oe-core's `qemu-system-native`. Every `-nic` becomes
-the next front port, `lan1` first. There is no flash: only the initramfs
-image works, and nothing survives a reboot.
+the next front port, `lan1` first.
 ethernet-switch-os' `scripts/mips-rtl838x-qemu` wraps all this, with networking.
 
 ## Flash image

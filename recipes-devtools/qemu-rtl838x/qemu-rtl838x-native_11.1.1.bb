@@ -3,7 +3,8 @@
 # rtl838x-qemu (https://github.com/AlbrechtL/rtl838x-qemu) emulates the Zyxel
 # GS1900-8: an RTL8380M with its interrupt controller, timers, UART, watchdog,
 # and a switch core whose eight front ports really forward frames (VLANs,
-# spanning tree). It boots the initramfs image of zyxel-gs1900-8-a1 as is.
+# spanning tree), and its SPI-NOR flash. It boots the initramfs image of
+# zyxel-gs1900-8-a1 as is, and the firmware from flash as the bootloader does.
 #
 # rtl838x-qemu is not a QEMU fork but a set of device models plus one small
 # patch against a pinned QEMU release. This recipe does what its
@@ -34,7 +35,7 @@ SRC_URI = "https://download.qemu.org/qemu-${PV}.tar.xz;name=qemu \
            file://0001-configure-use-the-build-system-s-python-and-meson.patch \
            "
 SRC_URI[qemu.sha256sum] = "079ffbff8a7111bbc89022107cbabf3bbfd614d5fc9d7cc675991196aca12482"
-SRCREV_rtl838x = "e573849bf9baff6dcfcfa4d37a0cdf0a47d61e0e"
+SRCREV_rtl838x = "5a1b0e406ac10baddbe0af403dcb28c169808398"
 SRCREV_FORMAT = "rtl838x"
 
 S = "${UNPACKDIR}/qemu-${PV}"
