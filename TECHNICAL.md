@@ -28,6 +28,23 @@ Two loader variants are built from one payload. The raw one is compiled with
 `KERNEL_ADDR=0x80100000` so it can be started from anywhere; the uImage one
 without, so it adopts its own run address (which `bootm` sets to `0x80100000`).
 
+### Booting the raw loader with `go`
+
+The raw variant is deployed as `<distro>-initramfs-<machine>-rt-loader.bin`,
+next to the uImage. ethernet-switch-os does not publish it, and nothing needs
+it: `bootm` with the uImage is the documented way. It is kept for the case
+where a bootloader's `bootm` gets in the way. It carries no uImage header, so
+it is started with `go`, from any address:
+
+```text
+rtk network on
+tftpboot 0x84f00000 192.168.1.12:ethernet-switch-os-initramfs-zyxel-gs1900-8-a1-rt-loader.bin
+go 0x84f00000
+```
+
+The two files are **not** interchangeable: `bootm` on the raw one gives
+`Bad Header Checksum`, because there is no header to check.
+
 ### Choosing a TFTP staging address
 
 RAM is 128 MB, and KSEG0 maps `0x80000000` + physical, so valid addresses stop
