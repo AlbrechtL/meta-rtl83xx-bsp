@@ -25,6 +25,8 @@ KERNEL_FEATURES:append:rtl83xx = " features/rtl83xx/rtl83xx.scc"
 # its own gpio-button-hotplug module), so it is added only where a board uses
 # it, and the other kernels do not grow.
 KERNEL_FEATURES:append:albrecht-rtl8382mi-test = " features/rtl83xx/gpio-keys.scc"
+# The Zyxel GS1900-8's reset button: a factory reset when held.
+KERNEL_FEATURES:append:zyxel-gs1900-8-a1 = " features/rtl83xx/gpio-keys.scc"
 
 # The default of 1 passes --classify to symbol_why.py, which filtered the
 # mismatch report away entirely while the whole networking stack was silently

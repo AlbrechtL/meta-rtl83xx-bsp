@@ -1,7 +1,8 @@
 SUMMARY = "Overlay root setup for the RTL83xx flash image"
 DESCRIPTION = "/sbin/overlay-init, started as init= by the kernel: stacks a \
 JFFS2-backed overlay on the squashfs root and pivots into it before busybox \
-init runs."
+init runs. Erases the data partition first when a factory reset left \
+/overlay/.factory-reset."
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
@@ -24,5 +25,6 @@ do_install() {
 
 FILES:${PN} = "${base_sbindir}/overlay-init /overlay /rom /mnt"
 
-# mount (jffs2, overlay, --move) and pivot_root, both from busybox here.
+# mount (jffs2, overlay, --move), pivot_root, awk and, for the factory reset,
+# flash_eraseall (enabled in recipes-core/busybox), all from busybox here.
 RDEPENDS:${PN} = "busybox"

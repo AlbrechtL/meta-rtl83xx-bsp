@@ -13,8 +13,33 @@ log() {
     echo "overlay-init: $*"
 }
 
+# Erases the "data" partition and mounts it again, empty.
+erase_data() {
+    umount /overlay || return 1
+    mount -t proc proc /proc
+    mtd=$(awk -F: '/ "data"$/ { print $1 }' /proc/mtd)
+    umount /proc
+    [ -n "$mtd" ] || return 1
+    flash_eraseall -q -j "/dev/$mtd" || return 1
+    mount -t jffs2 -o noatime mtd:data /overlay
+}
+
 if mount -t jffs2 -o noatime mtd:data /overlay; then
     log "mtd:data mounted on /overlay"
+    # Factory reset: ethernet-switch-os-factory-reset left this marker and
+    # rebooted, because the partition cannot be wiped while the overlay on it
+    # is in use. Erasing the flash, rather than deleting files, leaves nothing
+    # of the old configuration, password or keys readable.
+    if [ -e /overlay/.factory-reset ]; then
+        log "factory reset: erasing mtd:data"
+        if erase_data; then
+            log "factory reset: mtd:data erased"
+        else
+            log "factory reset: cannot erase mtd:data, changes will NOT survive a reboot"
+            umount /overlay 2>/dev/null
+            mount -t tmpfs -o mode=0755 tmpfs /overlay
+        fi
+    fi
 else
     log "cannot mount mtd:data, changes will NOT survive a reboot"
     mount -t tmpfs -o mode=0755 tmpfs /overlay
