@@ -98,7 +98,8 @@ SRC_URI += "file://openwrt-generic-patches/backport-6.18/704-v7.3-net-phylink-tr
 # SRC_URI += "file://openwrt-generic-patches/backport-6.18/730-10-v6.19-net-phy-mxl-gpy-add-support-for-MxL86211C.patch"
 # SRC_URI += "file://openwrt-generic-patches/backport-6.18/730-11-v7.0-net-phy-mxl-gpy-implement-SGMII-in-band-configuratio.patch"
 SRC_URI += "file://openwrt-generic-patches/backport-6.18/737-01-v7.3-net-phylink-allow-PHYs-to-be-attached-in-802.3z-inba.patch"
-SRC_URI += "file://openwrt-generic-patches/backport-6.18/737-03-v7.3-net-phylink-correctly-validate-returned-PCS-in-phyli.patch"
+# Already in linux-yocto 6.18.52 through stable (b6b533f83461).
+# SRC_URI += "file://openwrt-generic-patches/backport-6.18/737-03-v7.3-net-phylink-correctly-validate-returned-PCS-in-phyli.patch"
 # SRC_URI += "file://openwrt-generic-patches/backport-6.18/740-v6.19-r8152-Advertise-software-timestamp-information.patch"
 # SRC_URI += "file://openwrt-generic-patches/backport-6.18/741-v7.1-r8152-Add-2500baseT-EEE-status-configuration-support.patch"
 # SRC_URI += "file://openwrt-generic-patches/backport-6.18/743-v7.1-r8152-add-helper-functions-for-PLA-USB-OCP-registers.patch"
@@ -427,6 +428,13 @@ SRC_URI += "file://openwrt-generic-patches/pending-6.18/760-17-DO-NOT-SUBMIT-net
 # Realtek RTL83xx patches
 # ---------------------------------------------------------------------------
 
+# Left out because linux-yocto 6.18.52 already has them through stable:
+#   032-01..032-05  irqchip/irq-realtek-rtl register helpers, multicore,
+#                   parent setup, data structure and mask (a9be52993526..
+#                   5aa7bbe0bac8)
+#   038             irqchip/irq-realtek-rtl readl_be()/writel_be()
+#                   (5f02599590a4)
+# 032-06..032-08 are refreshed on top of the stable version of the driver.
 SRC_URI += " \
     file://patches-6.18/021-v6.19-gpio-regmap-Bypass-cache-for-shadowed-outputs.patch \
     file://patches-6.18/022-v7.0-mtd-nand-realtek-ecc-relax-OOB-size-check-to-minimum.patch \
@@ -484,11 +492,6 @@ SRC_URI += " \
     file://patches-6.18/031-32-v7.4-net-mdio-realtek-rtl9300-Add-support-for-RTL838x.patch \
     file://patches-6.18/031-33-v7.4-net-mdio-realtek-rtl9300-Add-support-for-RTL839x.patch \
     file://patches-6.18/031-34-v7.4-net-mdio-realtek-rtl9300-reword-Kconfig-and-module-description.patch \
-    file://patches-6.18/032-01-v7.2-irqchip-irq-realtek-rtl-Add-simplify-register-helper.patch \
-    file://patches-6.18/032-02-v7.2-irqchip-irq-realtek-rtl-Add-multicore-support.patch \
-    file://patches-6.18/032-03-v7.3-irqchip-irq-realtek-rtl-Use-helper-for-parent-setup.patch \
-    file://patches-6.18/032-04-v7.3-irqchip-irq-realtek-rtl-Add-interrupt-data-structure.patch \
-    file://patches-6.18/032-05-v7.3-irqchip-irq-realtek-rtl-Add-mask-for-interrupt-handl.patch \
     file://patches-6.18/032-06-v7.3-irqchip-irq-realtek-rtl-Add-a-select-function.patch \
     file://patches-6.18/032-07-v7.3-irqchip-irq-realtek-rtl-Allow-shuffled-interrupt-ord.patch \
     file://patches-6.18/032-08-v7.3-irqchip-irq-realtek-rtl-Activate-multiple-parents.patch \
@@ -499,7 +502,6 @@ SRC_URI += " \
     file://patches-6.18/035-v7.3-watchdog-realtek-otto-change-to-use-regmap-API.patch \
     file://patches-6.18/036-v7.3-clocksource-rtl-otto-change-driver-to-use-__raw-reads-and-writes.patch \
     file://patches-6.18/037-v7.3-spi-realtek-rtl-change-to-__raw-reads-and-writes.patch \
-    file://patches-6.18/038-v7.3-irqchip-irq-realtek-rtl-change-to-__raw-reads-and-writes.patch \
     file://patches-6.18/039-01-v7.4-gpio-realtek-otto-use-__raw_readl-writel-in-realtek_.patch \
     file://patches-6.18/039-02-v7.4-gpio-realtek-otto-make-bank_read-write-overridable-b.patch \
     file://patches-6.18/300-01-enhance-realtek-platform-config.patch \
